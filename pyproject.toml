@@ -1,0 +1,44 @@
+[project]
+name = "platinum-gold-backend"
+version = "0.1.0"
+description = "REST API for structured The Binding of Isaac data"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "alembic>=1.19.1",
+    "asyncpg>=0.31.0",
+    "clerk-backend-api>=7.0.0",
+    "fastapi>=0.141.1",
+    "pydantic-settings>=2.15.0",
+    "redis>=8.1.0",
+    "sqlalchemy[asyncio]>=2.0.52",
+    "uvicorn[standard]>=0.52.4",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pyright>=1.1.411",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.4",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.pyright]
+include = ["app", "alembic", "tests"]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+
+[tool.ruff]
+extend-exclude = ["docs"]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["ASYNC", "B", "E", "F", "I", "UP"]
