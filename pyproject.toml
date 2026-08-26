@@ -43,3 +43,6 @@ target-version = "py313"
 
 [tool.ruff.lint]
 select = ["ASYNC", "B", "E", "F", "I", "UP"]
+
+[tool.vercel]
+entrypoint = "app.main:app"
