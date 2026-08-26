@@ -62,6 +62,7 @@ async def test_lifespan_creates_and_closes_runtime_resources(
         {
             "database_url": "postgresql+asyncpg://localhost/isaac_api",
             "redis_url": "redis://localhost:6379/0",
+            "clerk_secret_key": None,
         }
     )
     database_factory = build_database_factory(engine, session_factory)
@@ -96,6 +97,7 @@ async def test_lifespan_disposes_database_when_redis_creation_fails(
             {
                 "database_url": "postgresql+asyncpg://localhost/isaac_api",
                 "redis_url": "redis://localhost:6379/0",
+                "clerk_secret_key": None,
             }
         )
     )
@@ -123,6 +125,7 @@ async def test_lifespan_disposes_database_when_redis_close_fails(
             {
                 "database_url": "postgresql+asyncpg://localhost/isaac_api",
                 "redis_url": "redis://localhost:6379/0",
+                "clerk_secret_key": None,
             }
         )
     )

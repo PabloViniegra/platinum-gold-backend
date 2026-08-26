@@ -4,10 +4,9 @@ FastAPI backend for structured data from The Binding of Isaac. PostgreSQL is
 the source of truth and Redis provides disposable runtime infrastructure.
 
 This repository currently contains the executable foundation described in
-`tasks/spec.md`: typed configuration, async PostgreSQL and Redis clients,
-Alembic migrations, health checks, request IDs, structured request logs, and
-quality tooling. Item resources, Clerk authentication, caching, rate limiting,
-and ingestion are intentionally not implemented yet.
+`tasks/spec.md`, plus Clerk API-key authentication described in
+`tasks/spec-auth.md`. Item resources, caching, rate limiting, and ingestion
+are not implemented yet.
 
 ## Requirements
 
@@ -67,7 +66,7 @@ tables automatically at startup.
 |---|---:|---|
 | `DATABASE_URL` | Yes | Async SQLAlchemy URL using `postgresql+asyncpg` |
 | `REDIS_URL` | Yes | Redis URL using `redis` or `rediss` |
-| `CLERK_SECRET_KEY` | No | Reserved for the authentication vertical |
+| `CLERK_SECRET_KEY` | No | Clerk Backend secret for protected routes. Missing values fail closed. |
 | `ENVIRONMENT` | No | `development`, `test`, or `production` |
 | `LOG_LEVEL` | No | Python log level, defaults to `INFO` |
 
