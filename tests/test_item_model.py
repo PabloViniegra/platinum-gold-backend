@@ -1,9 +1,14 @@
 from datetime import datetime
+from pathlib import Path
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import CheckConstraint, DateTime, Integer, Table, Text, UniqueConstraint
 
 from app.core.database import Base
 from app.items.models import Item
+
+BASELINE_REVISION = "3159b05b2715"
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -106,6 +111,28 @@ def test_item_has_filter_indexes() -> None:
     assert ("quality",) in indexed
     assert ("item_type",) in indexed
     assert ("name",) in indexed
+
+
+def test_alembic_env_imports_item_model() -> None:
+    assert "app.items.models" in Path("alembic/env.py").read_text()
+
+
+def test_create_items_revision_follows_baseline() -> None:
+    script = ScriptDirectory.from_config(Config("alembic.ini"))
+    head = script.get_current_head()
+    assert head is not None
+    revision = script.get_revision(head)
+    assert revision.down_revision == BASELINE_REVISION
+
+
+def test_create_items_revision_creates_and_drops_items() -> None:
+    script = ScriptDirectory.from_config(Config("alembic.ini"))
+    head = script.get_current_head()
+    assert head is not None
+    source = Path(script.get_revision(head).path).read_text()
+    assert "op.create_table(" in source
+    assert '"items"' in source or "'items'" in source
+    assert "op.drop_table(" in source
 
 
 def test_timestamps_have_server_default() -> None:

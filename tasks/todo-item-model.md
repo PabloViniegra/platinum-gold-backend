@@ -39,17 +39,17 @@ abren PostgreSQL.
 
 **Acceptance criteria:**
 
-- [ ] `alembic/env.py` importa `app.items.models`.
-- [ ] La revision tiene `down_revision == "3159b05b2715"`.
-- [ ] `upgrade` crea la tabla `items`.
-- [ ] `downgrade` elimina la tabla `items`.
-- [ ] El baseline `3159b05b2715` no se modifica.
+- [x] `alembic/env.py` importa `app.items.models`.
+- [x] La revision tiene `down_revision == "3159b05b2715"`.
+- [x] `upgrade` crea la tabla `items`.
+- [x] `downgrade` elimina la tabla `items`.
+- [x] El baseline `3159b05b2715` no se modifica.
 
 **Verification:**
 
-- [ ] RED y GREEN: `uv run pytest tests/test_item_model.py`
-- [ ] Revisar el SQL autogenerado antes de dejarlo en el repo.
-- [ ] `uv run pyright alembic tests/test_item_model.py`
+- [x] RED y GREEN: `uv run pytest tests/test_item_model.py`
+- [x] Revisar el SQL autogenerado antes de dejarlo en el repo.
+- [x] `uv run pyright alembic tests/test_item_model.py`
 
 **Dependencies:** Task 1
 
