@@ -12,6 +12,7 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logging import RequestLoggingMiddleware, configure_logging
 from app.core.redis import create_redis
 from app.health.router import router as health_router
+from app.items.router import router as items_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -50,6 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(RequestLoggingMiddleware)
     register_exception_handlers(app)
     app.include_router(health_router)
+    app.include_router(items_router)
 
     def openapi() -> dict[str, object]:
         if app.openapi_schema is not None:
