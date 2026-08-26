@@ -15,13 +15,21 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.create_table(
         "dataset_metadata",
-        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.Integer(), autoincrement=False, nullable=False),
         sa.Column("dataset_version", sa.Text(), nullable=False),
         sa.Column("game_version", sa.Text(), nullable=True),
         sa.Column("last_sync", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
             "id = 1",
             name=op.f("ck_dataset_metadata_singleton_key"),
+        ),
+        sa.CheckConstraint(
+            "btrim(dataset_version) <> ''",
+            name=op.f("ck_dataset_metadata_dataset_version_nonempty"),
+        ),
+        sa.CheckConstraint(
+            "game_version IS NULL OR btrim(game_version) <> ''",
+            name=op.f("ck_dataset_metadata_game_version_nonempty"),
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_dataset_metadata")),
     )

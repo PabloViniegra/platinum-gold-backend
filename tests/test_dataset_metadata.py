@@ -31,6 +31,7 @@ def test_dataset_metadata_columns_match_contract() -> None:
     assert isinstance(table.c.game_version.type, Text)
     assert isinstance(table.c.last_sync.type, DateTime)
     assert table.c.last_sync.type.timezone is True
+    assert table.c.id.autoincrement is False
 
 
 def test_dataset_metadata_has_singleton_constraints() -> None:
@@ -46,7 +47,10 @@ def test_dataset_metadata_has_singleton_constraints() -> None:
         if isinstance(constraint, PrimaryKeyConstraint)
     ]
 
-    assert any("id = 1" in str(constraint.sqltext) for constraint in checks)
+    check_sql = {str(constraint.sqltext) for constraint in checks}
+    assert "id = 1" in check_sql
+    assert "btrim(dataset_version) <> ''" in check_sql
+    assert "game_version IS NULL OR btrim(game_version) <> ''" in check_sql
     assert any(list(constraint.columns.keys()) == ["id"] for constraint in primary_keys)
     assert table.c.dataset_version.nullable is False
     assert table.c.game_version.nullable is True
