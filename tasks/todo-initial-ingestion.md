@@ -12,19 +12,19 @@ conexion ni depender de la API.
 
 **Acceptance criteria:**
 
-- [ ] Un snapshot valido con aliases camelCase produce modelos Python en
+- [x] Un snapshot valido con aliases camelCase produce modelos Python en
   snake_case y elimina espacios exteriores de strings.
-- [ ] JSON invalido, campos desconocidos, tipos incompatibles, strings vacios,
+- [x] JSON invalido, campos desconocidos, tipos incompatibles, strings vacios,
   URLs no HTTP(S), calidad fuera de rango, lista vacia y `gameId` duplicado
   fallan con errores de validacion observables.
-- [ ] La validacion completa ocurre antes de exponer el snapshot al servicio de
+- [x] La validacion completa ocurre antes de exponer el snapshot al servicio de
   persistencia.
 
 **Verification:**
 
-- [ ] RED y GREEN: `uv run pytest tests/test_ingestion.py`
-- [ ] `uv run pyright app/ingestion tests/test_ingestion.py`
-- [ ] `uv run ruff check app/ingestion tests/test_ingestion.py`
+- [x] RED y GREEN: `uv run pytest tests/test_ingestion.py`
+- [x] `uv run pyright app/ingestion tests/test_ingestion.py`
+- [x] `uv run ruff check app/ingestion tests/test_ingestion.py`
 
 **Dependencies:** None
 
