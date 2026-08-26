@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Protocol
 
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
@@ -11,6 +12,18 @@ from app.core.exceptions import AppError
 from app.ingestion.schemas import ItemImport
 from app.items.models import Item
 from app.meta.models import DatasetMetadata
+
+
+class IngestionRepository(Protocol):
+    async def upsert_items(self, items: Sequence[ItemImport]) -> None: ...
+
+    async def upsert_metadata(
+        self,
+        *,
+        dataset_version: str,
+        game_version: str | None,
+        last_sync: datetime,
+    ) -> None: ...
 
 
 class SqlAlchemyIngestionRepository:

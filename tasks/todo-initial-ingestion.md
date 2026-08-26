@@ -107,17 +107,17 @@ falla un paso posterior.
 
 **Acceptance criteria:**
 
-- [ ] El servicio valida/recibe el lote antes de abrir la transaccion y
+- [x] El servicio valida/recibe el lote antes de abrir la transaccion y
   ejecuta items y metadata en el mismo contexto.
-- [ ] Una excepcion de persistencia no deja cambios parciales y no publica
+- [x] Una excepcion de persistencia no deja cambios parciales y no publica
   metadata de sincronizacion.
-- [ ] El servicio no importa FastAPI ni realiza llamadas de red.
+- [x] El servicio no importa FastAPI ni realiza llamadas de red.
 
 **Verification:**
 
-- [ ] RED y GREEN: `uv run pytest tests/test_ingestion_service.py`
-- [ ] `uv run pyright app/ingestion tests/test_ingestion_service.py`
-- [ ] `uv run ruff check app/ingestion tests/test_ingestion_service.py`
+- [x] RED y GREEN: `uv run pytest tests/test_ingestion_service.py`
+- [x] `uv run pyright app/ingestion tests/test_ingestion_service.py`
+- [x] `uv run ruff check app/ingestion tests/test_ingestion_service.py`
 
 **Dependencies:** Task 3
 
