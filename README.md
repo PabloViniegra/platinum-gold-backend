@@ -5,8 +5,9 @@ the source of truth and Redis provides disposable runtime infrastructure.
 
 This repository currently contains the executable foundation described in
 `tasks/spec.md`, Clerk API-key authentication described in `tasks/spec-auth.md`,
-and the authenticated read API for items. Caching, rate limiting, and ingestion
-are not implemented yet.
+the authenticated read API for items, and the offline ingestion flow described
+in `tasks/spec-initial-ingestion.md`. Caching and rate limiting are not
+implemented yet.
 
 ## Requirements
 
@@ -25,6 +26,25 @@ uv run uvicorn app.main:app --reload
 ```
 
 The API documentation is available at `http://127.0.0.1:8000/docs`.
+
+## Offline Ingestion
+
+Platinum God is the upstream source. Ingestion runs offline from an explicit,
+versioned JSON snapshot and never scrapes or contacts the upstream source from
+the API runtime.
+
+After configuring `DATABASE_URL` in `.env`, publish the example snapshot with:
+
+```bash
+uv run python -m scripts.ingest --input data/items.example.json
+```
+
+The command validates the complete snapshot before opening a transaction,
+upserts items by `gameId`, preserves records absent from the snapshot, and
+updates dataset metadata only after the full transaction succeeds. Invalid
+input or a database failure exits non-zero without publishing partial data.
+The snapshot contract and update policy are documented in
+`tasks/spec-initial-ingestion.md`.
 
 ## Health Checks
 
@@ -97,8 +117,13 @@ JavaScript.
 app/
 |-- core/       # Configuration and runtime infrastructure
 |-- health/     # Liveness and readiness feature
+|-- ingestion/  # Offline snapshot validation and persistence
+|-- items/      # Item model and authenticated read API
+|-- meta/       # Dataset metadata model
 `-- main.py     # FastAPI application factory and lifespan
 alembic/        # Database migrations
+data/           # Non-authoritative local example snapshots
+scripts/        # Offline administrative commands
 tests/          # Unit, API, and opt-in integration tests
 tasks/          # Approved specification and implementation plan
 ```

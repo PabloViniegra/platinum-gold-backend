@@ -160,10 +160,12 @@ app/
 |-- ingestion/
 |   |-- __init__.py
 |   |-- schemas.py          # Contrato y validacion del snapshot
+|   |-- loader.py           # Lectura offline y errores de fichero/JSON
+|   |-- repository.py       # Upserts PostgreSQL de items y metadata
 |   `-- service.py          # Orquestacion transaccional de la ingesta
 |-- items/
 |   |-- models.py           # Item existente
-|   `-- repository.py        # Lectura existente y escritura de ingesta
+|   `-- repository.py        # Lectura de items y metadata para la API
 |-- meta/
 |   |-- __init__.py
 |   `-- models.py           # Metadata singleton del dataset
@@ -173,7 +175,8 @@ scripts/
 alembic/versions/*_create_dataset_metadata.py
 data/items.example.json     # Snapshot pequeno y no sensible para desarrollo
 tests/
-|-- test_ingestion.py       # JSON, validacion y comportamiento de servicio
+|-- test_ingestion.py       # JSON y validacion del snapshot
+|-- test_ingestion_service.py # Orquestacion y rollback de la transaccion
 |-- test_items_api.py       # Meta con y sin metadata
 `-- integration/test_ingestion_postgres.py
 tasks/spec-initial-ingestion.md

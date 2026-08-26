@@ -196,19 +196,19 @@ estado real de la implementacion.
 
 **Acceptance criteria:**
 
-- [ ] La integracion cubre rollback de lote, metadata posterior a commit,
+- [x] La integracion cubre rollback de lote, metadata posterior a commit,
   repeticion y conservacion de filas ausentes.
-- [ ] README documenta la fuente de ejecucion, el comando offline, la base
+- [x] README documenta la fuente de ejecucion, el comando offline, la base
   local de prueba y que no existe scraping en runtime.
-- [ ] El spec y el plan no contradicen el comportamiento implementado.
+- [x] El spec y el plan no contradicen el comportamiento implementado.
 
 **Verification:**
 
-- [ ] `TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/isaac_api_test make integration`
-- [ ] `uv run pytest`
-- [ ] `uv run ruff check .`
-- [ ] `uv run ruff format --check .`
-- [ ] `uv run pyright`
+- [x] `TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/isaac_api_test make integration`
+- [x] `uv run pytest`
+- [x] `uv run ruff check .`
+- [x] `uv run ruff format --check .`
+- [x] `uv run pyright`
 
 **Dependencies:** Tasks 1-6
 
