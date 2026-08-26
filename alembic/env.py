@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
 from app.core.config import Settings
-from app.core.database import Base, database_connect_args
+from app.core.database import database_connect_args
+from app.items.models import Item
 
 config = context.config
 
@@ -19,7 +20,7 @@ if config.config_file_name is not None:
 settings_factory = cast(Callable[[], Settings], Settings)
 settings = settings_factory()
 database_url = settings.database_url.get_secret_value()
-target_metadata = Base.metadata
+target_metadata = Item.metadata
 
 
 def run_migrations_offline() -> None:
