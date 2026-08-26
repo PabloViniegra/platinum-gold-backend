@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -5,7 +7,7 @@ from app.auth.dependencies import get_api_key_verifier
 from app.auth.principal import ApiPrincipal
 from app.core.config import Settings
 from app.items.dependencies import get_item_repository
-from app.items.repository import ItemRecord
+from app.items.repository import DatasetMetadataRecord, ItemRecord
 from app.main import create_app
 
 
@@ -28,8 +30,16 @@ class FakeVerifier:
 
 
 class FakeItemRepository:
-    def __init__(self, items: list[ItemRecord] | None = None) -> None:
+    def __init__(
+        self,
+        items: list[ItemRecord] | None = None,
+        metadata: DatasetMetadataRecord | None = None,
+    ) -> None:
         self.items = items or []
+        self.metadata = metadata
+
+    async def get_metadata(self) -> DatasetMetadataRecord | None:
+        return self.metadata
 
     async def get_by_game_id(self, game_id: int) -> ItemRecord | None:
         return next((item for item in self.items if item.game_id == game_id), None)
@@ -376,8 +386,37 @@ async def test_meta_returns_api_version_and_item_count() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "apiVersion": "0.1.0",
+        "datasetVersion": None,
         "gameVersion": None,
         "lastSync": None,
+        "items": 2,
+    }
+
+
+@pytest.mark.asyncio
+async def test_meta_returns_dataset_metadata_after_ingestion() -> None:
+    metadata = DatasetMetadataRecord(
+        dataset_version="platinum-god-2026-08-26",
+        game_version="repentance",
+        last_sync=datetime(2026, 8, 26, 10, 30, tzinfo=UTC),
+    )
+    app = build_items_app(FakeItemRepository([BRIMSTONE, SAD_ONION], metadata))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/v1/meta",
+            headers={"X-API-Key": "ak_valid"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "apiVersion": "0.1.0",
+        "datasetVersion": "platinum-god-2026-08-26",
+        "gameVersion": "repentance",
+        "lastSync": "2026-08-26T10:30:00Z",
         "items": 2,
     }
 

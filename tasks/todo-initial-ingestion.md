@@ -164,18 +164,18 @@ metadata disponible y mantener los nulos antes de la primera ingesta.
 
 **Acceptance criteria:**
 
-- [ ] `MetaResponse` expone `datasetVersion` nullable sin romper el contrato
+- [x] `MetaResponse` expone `datasetVersion` nullable sin romper el contrato
   camelCase existente.
-- [ ] Sin fila de metadata, `/v1/meta` mantiene `datasetVersion`,
+- [x] Sin fila de metadata, `/v1/meta` mantiene `datasetVersion`,
   `gameVersion` y `lastSync` en `null`.
-- [ ] Con metadata, `/v1/meta` devuelve sus valores y el recuento real de
+- [x] Con metadata, `/v1/meta` devuelve sus valores y el recuento real de
   items; health y autenticacion permanecen sin cambios.
 
 **Verification:**
 
-- [ ] RED y GREEN: `uv run pytest tests/test_items_api.py`
-- [ ] `uv run pyright app/items tests/test_items_api.py`
-- [ ] `uv run ruff check app/items tests/test_items_api.py`
+- [x] RED y GREEN: `uv run pytest tests/test_items_api.py`
+- [x] `uv run pyright app/items tests/test_items_api.py`
+- [x] `uv run ruff check app/items tests/test_items_api.py`
 
 **Dependencies:** Task 2
 

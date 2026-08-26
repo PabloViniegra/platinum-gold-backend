@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from datetime import datetime
+from typing import Any, Protocol, cast
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.engine import Result
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError
 from app.items.models import Item
+from app.meta.models import DatasetMetadata
 
 SORT_COLUMNS = {
     "name": Item.name,
@@ -29,7 +31,16 @@ class ItemRecord:
     introduced_in_version: str | None
 
 
+@dataclass(frozen=True)
+class DatasetMetadataRecord:
+    dataset_version: str
+    game_version: str | None
+    last_sync: datetime
+
+
 class ItemRepository(Protocol):
+    async def get_metadata(self) -> DatasetMetadataRecord | None: ...
+
     async def get_by_game_id(self, game_id: int) -> ItemRecord | None: ...
 
     async def list_items(
@@ -67,6 +78,13 @@ class ItemRepository(Protocol):
 class SqlAlchemyItemRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def get_metadata(self) -> DatasetMetadataRecord | None:
+        result = await self._execute(
+            select(DatasetMetadata).where(DatasetMetadata.id == 1),
+        )
+        metadata = cast(DatasetMetadata | None, result.scalar_one_or_none())
+        return None if metadata is None else to_metadata_record(metadata)
 
     async def get_by_game_id(self, game_id: int) -> ItemRecord | None:
         item = await self._scalar(
@@ -178,4 +196,12 @@ def to_record(item: Item) -> ItemRecord:
         recharge_time=item.recharge_time,
         image_url=item.image_url,
         introduced_in_version=item.introduced_in_version,
+    )
+
+
+def to_metadata_record(metadata: DatasetMetadata) -> DatasetMetadataRecord:
+    return DatasetMetadataRecord(
+        dataset_version=metadata.dataset_version,
+        game_version=metadata.game_version,
+        last_sync=metadata.last_sync,
     )

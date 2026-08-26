@@ -65,10 +65,12 @@ class ItemService:
             item_type=None,
             version=None,
         )
+        metadata = await self._repository.get_metadata()
         return MetaResponse(
             api_version=api_version,
-            game_version=None,
-            last_sync=None,
+            dataset_version=None if metadata is None else metadata.dataset_version,
+            game_version=None if metadata is None else metadata.game_version,
+            last_sync=None if metadata is None else metadata.last_sync,
             items=total,
         )
 

@@ -43,6 +43,7 @@ class MetaResponse(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     api_version: str
+    dataset_version: str | None
     game_version: str | None
     last_sync: datetime | None
     items: int
