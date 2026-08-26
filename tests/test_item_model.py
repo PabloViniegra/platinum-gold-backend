@@ -9,6 +9,7 @@ from app.core.database import Base
 from app.items.models import Item
 
 BASELINE_REVISION = "3159b05b2715"
+CREATE_ITEMS_REVISION = "2a06a50207ce"
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -117,22 +118,28 @@ def test_alembic_env_imports_item_model() -> None:
     assert "app.items.models" in Path("alembic/env.py").read_text()
 
 
-def test_create_items_revision_follows_baseline() -> None:
+def create_items_revision_source() -> str:
     script = ScriptDirectory.from_config(Config("alembic.ini"))
-    head = script.get_current_head()
-    assert head is not None
-    revision = script.get_revision(head)
+    revision = script.get_revision(CREATE_ITEMS_REVISION)
     assert revision.down_revision == BASELINE_REVISION
+    return Path(revision.path).read_text()
+
+
+def test_create_items_revision_follows_baseline() -> None:
+    create_items_revision_source()
 
 
 def test_create_items_revision_creates_and_drops_items() -> None:
-    script = ScriptDirectory.from_config(Config("alembic.ini"))
-    head = script.get_current_head()
-    assert head is not None
-    source = Path(script.get_revision(head).path).read_text()
+    source = " ".join(create_items_revision_source().split())
     assert "op.create_table(" in source
-    assert '"items"' in source or "'items'" in source
-    assert "op.drop_table(" in source
+    assert '"items"' in source
+    assert 'UniqueConstraint("game_id"' in source
+    assert '"quality BETWEEN 0 AND 4"' in source
+    assert "ck_items_quality_range" in source
+    assert 'create_index(op.f("ix_items_quality")' in source
+    assert 'create_index(op.f("ix_items_item_type")' in source
+    assert 'create_index(op.f("ix_items_name")' in source
+    assert 'op.drop_table("items")' in source
 
 
 def test_timestamps_have_server_default() -> None:
