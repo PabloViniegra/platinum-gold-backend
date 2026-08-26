@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-.PHONY: help setup dev up down logs migrate migrate-down test lint format typecheck check smoke clean
+.PHONY: help setup dev up down logs migrate migrate-down test integration lint format typecheck check smoke clean
 
 help: ## Muestra los comandos disponibles
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -32,6 +32,13 @@ dev: up migrate ## Inicia el servidor de desarrollo
 
 test: ## Ejecuta la suite de tests
 	uv run pytest
+
+integration: ## Ejecuta tests de integracion contra TEST_DATABASE_URL
+	@if [[ -z "$${TEST_DATABASE_URL:-}" ]]; then echo "Define TEST_DATABASE_URL antes de ejecutar la integracion."; exit 1; fi
+	TEST_DATABASE_URL="$${TEST_DATABASE_URL}" uv run python scripts/validate_test_database.py
+	docker compose up -d --wait postgres redis
+	DATABASE_URL="$${TEST_DATABASE_URL}" REDIS_URL=redis://localhost:6379/0 uv run alembic upgrade head
+	TEST_DATABASE_URL="$${TEST_DATABASE_URL}" uv run pytest -o addopts="" -m integration
 
 lint: ## Ejecuta lint
 	uv run ruff check .
