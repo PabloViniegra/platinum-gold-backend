@@ -24,3 +24,5 @@ skills-lock.json
 opencode.json
 .agents/*
 .opencode/*
+.vercel
+.env*.local
