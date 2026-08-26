@@ -1,0 +1,16 @@
+{
+  "datasetVersion": "example",
+  "gameVersion": "repentance",
+  "items": [
+    {
+      "gameId": 118,
+      "name": "Brimstone",
+      "description": "Tears are replaced by a laser beam.",
+      "quality": 4,
+      "type": "passive",
+      "rechargeTime": null,
+      "imageUrl": "https://example.com/118.png",
+      "introducedInVersion": "rebirth"
+    }
+  ]
+}

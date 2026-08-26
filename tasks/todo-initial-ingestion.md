@@ -135,17 +135,17 @@ explicita, carga previa a la transaccion y errores operativos sanitizados.
 
 **Acceptance criteria:**
 
-- [ ] `uv run python -m scripts.ingest --input data/items.example.json` usa
+- [x] `uv run python -m scripts.ingest --input data/items.example.json` usa
   `DATABASE_URL` y termina correctamente contra una base configurada.
-- [ ] Falta de ruta, fichero ilegible, JSON invalido, validacion fallida o
+- [x] Falta de ruta, fichero ilegible, JSON invalido, validacion fallida o
   PostgreSQL indisponible terminan con codigo no cero sin mostrar secretos.
-- [ ] El modulo no contacta la red upstream ni se registra en el lifespan HTTP.
+- [x] El modulo no contacta la red upstream ni se registra en el lifespan HTTP.
 
 **Verification:**
 
-- [ ] RED y GREEN: `uv run pytest tests/test_ingest_cli.py`
-- [ ] `uv run pyright scripts tests/test_ingest_cli.py`
-- [ ] `uv run ruff check scripts tests/test_ingest_cli.py`
+- [x] RED y GREEN: `uv run pytest tests/test_ingest_cli.py`
+- [x] `uv run pyright scripts tests/test_ingest_cli.py`
+- [x] `uv run ruff check scripts tests/test_ingest_cli.py`
 
 **Dependencies:** Task 1, Task 4
 
