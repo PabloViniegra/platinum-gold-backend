@@ -15,6 +15,10 @@ from app.ingestion.loader import SnapshotLoadError, load_snapshot
 from app.ingestion.service import IngestionService
 
 
+class ConfigurationError(Exception):
+    pass
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Publish an item snapshot")
     parser.add_argument(
@@ -36,7 +40,10 @@ def format_validation_error(error: ValidationError) -> str:
 async def run_ingestion(input_path: Path) -> None:
     snapshot = load_snapshot(input_path)
     settings_factory = cast(Callable[[], Settings], Settings)
-    settings = settings_factory()
+    try:
+        settings = settings_factory()
+    except ValidationError as exc:
+        raise ConfigurationError from exc
     engine, session_factory = create_database(settings)
     try:
         await IngestionService(session_factory).ingest(snapshot)
@@ -53,6 +60,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     except ValidationError as exc:
         print(f"Invalid snapshot: {format_validation_error(exc)}", file=sys.stderr)
+        return 2
+    except ConfigurationError:
+        print("Ingestion failed: configuration is invalid", file=sys.stderr)
         return 2
     except (AppError, OSError, SQLAlchemyError, TimeoutError):
         print("Ingestion failed: required service is unavailable", file=sys.stderr)

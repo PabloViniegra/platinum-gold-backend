@@ -33,7 +33,8 @@ Platinum God is the upstream source. Ingestion runs offline from an explicit,
 versioned JSON snapshot and never scrapes or contacts the upstream source from
 the API runtime.
 
-After configuring `DATABASE_URL` in `.env`, publish the example snapshot with:
+After configuring `DATABASE_URL` and `REDIS_URL` in `.env`, publish the example
+snapshot with:
 
 ```bash
 uv run python -m scripts.ingest --input data/items.example.json

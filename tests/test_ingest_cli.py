@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from app.core.exceptions import AppError
 from app.ingestion.schemas import ItemSnapshot
@@ -132,3 +133,33 @@ def test_cli_reports_database_failure_without_connection_details(
     assert result != 0
     assert engine.disposed is True
     assert "DATABASE_URL" not in capsys.readouterr().err
+
+
+def test_cli_reports_configuration_failure_separately(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    settings_class = ingest_module.Settings
+
+    def invalid_settings() -> object:
+        raise ValidationError.from_exception_data(
+            settings_class.__name__,
+            [
+                {
+                    "type": "missing",
+                    "loc": ("database_url",),
+                    "input": {},
+                }
+            ],
+        )
+
+    monkeypatch.setattr(ingest_module, "Settings", invalid_settings)
+
+    result = ingest_module.main(["--input", str(snapshot_path(tmp_path))])
+
+    assert result == 2
+    error = capsys.readouterr().err
+    assert "configuration is invalid" in error
+    assert "Invalid snapshot" not in error
+    assert "DATABASE_URL" not in error
