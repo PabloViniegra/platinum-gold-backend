@@ -33,8 +33,7 @@ Platinum God is the upstream source. Ingestion runs offline from an explicit,
 versioned JSON snapshot and never scrapes or contacts the upstream source from
 the API runtime.
 
-After configuring `DATABASE_URL` and `REDIS_URL` in `.env`, publish the example
-snapshot with:
+After configuring `DATABASE_URL` in `.env`, publish the example snapshot with:
 
 ```bash
 uv run python -m scripts.ingest --input data/items.example.json
@@ -42,8 +41,11 @@ uv run python -m scripts.ingest --input data/items.example.json
 
 The command validates the complete snapshot before opening a transaction,
 upserts items by `gameId`, preserves records absent from the snapshot, and
-updates dataset metadata only after the full transaction succeeds. Invalid
-input or a database failure exits non-zero without publishing partial data.
+updates dataset metadata only after the full transaction succeeds. A run that
+is not newer than the recorded synchronization is a successful no-op, so an
+older run cannot replace committed data. The command does not infer ordering
+from the opaque `datasetVersion` label. Invalid input or a database failure
+exits non-zero without publishing partial data.
 The snapshot contract and update policy are documented in
 `tasks/spec-initial-ingestion.md`.
 
@@ -85,7 +87,7 @@ Run PostgreSQL integration tests against an explicit database with:
 
 ```bash
 docker compose exec -T postgres psql -U postgres -d postgres -c 'CREATE DATABASE isaac_api_test;'
-TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/isaac_api make integration
+TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/isaac_api_test make integration
 ```
 
 The integration target only accepts local PostgreSQL databases whose name ends
@@ -105,9 +107,14 @@ tables automatically at startup.
 | `ENVIRONMENT` | No | `development`, `test`, or `production` |
 | `LOG_LEVEL` | No | Python log level, defaults to `INFO` |
 
-Remote production URLs must use encrypted connections: TLS is required for
-PostgreSQL and Redis must use `rediss://`. Local loopback connections may remain
-unencrypted for development.
+Non-loopback PostgreSQL connections use verified TLS in every environment.
+Remote production Redis must use `rediss://`. Local loopback and Unix-socket
+connections may remain unencrypted for development.
+
+The ingestion command requires the database name and remote credentials in
+`DATABASE_URL`; it rejects driver environment overrides and routing or TLS
+query parameters. The asyncpg `prepared_statement_cache_size` option remains
+supported.
 
 Do not embed API keys intended for server-to-server use in public browser
 JavaScript.

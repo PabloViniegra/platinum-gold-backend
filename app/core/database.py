@@ -1,8 +1,9 @@
 import ssl
 from collections.abc import AsyncGenerator
-from typing import cast
+from typing import Protocol, cast
 
 from fastapi import Request
+from pydantic import SecretStr
 from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -12,7 +13,6 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 
-from app.core.config import Settings
 from app.core.exceptions import AppError
 
 NAMING_CONVENTION = {
@@ -28,8 +28,16 @@ class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
+class DatabaseSettings(Protocol):
+    database_url: SecretStr
+    dependency_timeout_seconds: float
+
+    @property
+    def database_requires_tls(self) -> bool: ...
+
+
 def create_database(
-    settings: Settings,
+    settings: DatabaseSettings,
 ) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
     engine = create_async_engine(
         settings.database_url.get_secret_value(),
@@ -39,12 +47,15 @@ def create_database(
     return engine, async_sessionmaker(engine, expire_on_commit=False)
 
 
-def database_connect_args(settings: Settings) -> dict[str, object]:
+def database_connect_args(settings: DatabaseSettings) -> dict[str, object]:
     connect_args: dict[str, object] = {
         "timeout": settings.dependency_timeout_seconds,
+        "command_timeout": settings.dependency_timeout_seconds,
     }
     if settings.database_requires_tls:
-        connect_args["ssl"] = ssl.create_default_context()
+        tls_context = ssl.create_default_context()
+        tls_context.keylog_filename = None  # type: ignore[reportAttributeAccessIssue]
+        connect_args["ssl"] = tls_context
     return connect_args
 
 

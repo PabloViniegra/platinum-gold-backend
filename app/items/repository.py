@@ -38,8 +38,14 @@ class DatasetMetadataRecord:
     last_sync: datetime
 
 
+@dataclass(frozen=True)
+class CatalogMetaRecord:
+    items: int
+    metadata: DatasetMetadataRecord | None
+
+
 class ItemRepository(Protocol):
-    async def get_metadata(self) -> DatasetMetadataRecord | None: ...
+    async def get_catalog_meta(self) -> CatalogMetaRecord: ...
 
     async def get_by_game_id(self, game_id: int) -> ItemRecord | None: ...
 
@@ -79,12 +85,37 @@ class SqlAlchemyItemRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_metadata(self) -> DatasetMetadataRecord | None:
-        result = await self._execute(
-            select(DatasetMetadata).where(DatasetMetadata.id == 1),
+    async def get_catalog_meta(self) -> CatalogMetaRecord:
+        item_count = select(func.count()).select_from(Item).scalar_subquery()
+        dataset_version = (
+            select(DatasetMetadata.dataset_version)
+            .where(DatasetMetadata.id == 1)
+            .scalar_subquery()
         )
-        metadata = cast(DatasetMetadata | None, result.scalar_one_or_none())
-        return None if metadata is None else to_metadata_record(metadata)
+        game_version = (
+            select(DatasetMetadata.game_version)
+            .where(DatasetMetadata.id == 1)
+            .scalar_subquery()
+        )
+        last_sync = (
+            select(DatasetMetadata.last_sync)
+            .where(DatasetMetadata.id == 1)
+            .scalar_subquery()
+        )
+        result = await self._execute(
+            select(item_count, dataset_version, game_version, last_sync),
+        )
+        total, dataset_version_value, game_version_value, last_sync_value = result.one()
+        metadata = (
+            None
+            if dataset_version_value is None
+            else DatasetMetadataRecord(
+                dataset_version=cast(str, dataset_version_value),
+                game_version=cast(str | None, game_version_value),
+                last_sync=cast(datetime, last_sync_value),
+            )
+        )
+        return CatalogMetaRecord(items=int(total), metadata=metadata)
 
     async def get_by_game_id(self, game_id: int) -> ItemRecord | None:
         item = await self._scalar(
@@ -196,12 +227,4 @@ def to_record(item: Item) -> ItemRecord:
         recharge_time=item.recharge_time,
         image_url=item.image_url,
         introduced_in_version=item.introduced_in_version,
-    )
-
-
-def to_metadata_record(metadata: DatasetMetadata) -> DatasetMetadataRecord:
-    return DatasetMetadataRecord(
-        dataset_version=metadata.dataset_version,
-        game_version=metadata.game_version,
-        last_sync=metadata.last_sync,
     )

@@ -2,12 +2,14 @@ import os
 from collections.abc import AsyncIterator
 
 import pytest
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.database import create_database
 from app.items.models import Item
 from app.items.repository import SqlAlchemyItemRepository
+from app.meta.models import DatasetMetadata
 from scripts.validate_test_database import validate_test_database_url
 
 configured_test_database_url = os.getenv("TEST_DATABASE_URL")
@@ -52,6 +54,8 @@ async def database_session() -> AsyncIterator[AsyncSession]:
                 join_transaction_mode="create_savepoint",
             )
             try:
+                await session.execute(delete(Item))
+                await session.execute(delete(DatasetMetadata))
                 yield session
             finally:
                 try:
@@ -197,6 +201,7 @@ async def test_repository_reads_and_filters_items(
         item_type="active",
         version="repentance",
     )
+    catalog_meta = await repository.get_catalog_meta()
 
     assert result is not None
     assert result.name == "Brimstone"
@@ -204,6 +209,8 @@ async def test_repository_reads_and_filters_items(
     assert [matching.name for matching in first_page] == ["100%_Damage"]
     assert [matching.name for matching in second_page] == ["100xxDamage"]
     assert total == 3
+    assert catalog_meta.items == 8
+    assert catalog_meta.metadata is None
 
 
 @pytest.mark.asyncio

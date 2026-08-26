@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import asyncpg  # type: ignore[reportMissingTypeStubs]
 import pytest
 from pydantic import ValidationError
 
@@ -61,7 +62,7 @@ def test_cli_ingests_snapshot_and_disposes_database_engine(
     def fake_create_database(_settings: object) -> tuple[FakeEngine, str]:
         return engine, "session-factory"
 
-    monkeypatch.setattr(ingest_module, "Settings", lambda: "settings")
+    monkeypatch.setattr(ingest_module, "IngestionSettings", lambda: "settings")
     monkeypatch.setattr(ingest_module, "create_database", fake_create_database)
     monkeypatch.setattr(ingest_module, "IngestionService", FakeService)
 
@@ -92,14 +93,23 @@ def test_cli_rejects_invalid_snapshot_before_creating_database(
         encoding="utf-8",
     )
 
-    def unexpected_settings() -> None:
-        raise AssertionError("configuration should not be loaded")
+    calls: list[str] = []
 
-    monkeypatch.setattr(ingest_module, "Settings", unexpected_settings)
+    def unexpected_settings() -> str:
+        calls.append("settings")
+        return "settings"
+
+    def unexpected_database(_settings: object) -> tuple[FakeEngine, str]:
+        calls.append("database")
+        raise AssertionError("database should not be created")
+
+    monkeypatch.setattr(ingest_module, "IngestionSettings", unexpected_settings)
+    monkeypatch.setattr(ingest_module, "create_database", unexpected_database)
 
     result = ingest_module.main(["--input", str(path)])
 
-    assert result != 0
+    assert result == 2
+    assert calls == []
     assert "not-a-secret" not in capsys.readouterr().err
 
 
@@ -124,7 +134,7 @@ def test_cli_reports_database_failure_without_connection_details(
     def fake_create_database(_settings: object) -> tuple[FakeEngine, str]:
         return engine, "session-factory"
 
-    monkeypatch.setattr(ingest_module, "Settings", lambda: "settings")
+    monkeypatch.setattr(ingest_module, "IngestionSettings", lambda: "settings")
     monkeypatch.setattr(ingest_module, "create_database", fake_create_database)
     monkeypatch.setattr(ingest_module, "IngestionService", FakeService)
 
@@ -135,12 +145,43 @@ def test_cli_reports_database_failure_without_connection_details(
     assert "DATABASE_URL" not in capsys.readouterr().err
 
 
+def test_cli_sanitizes_asyncpg_driver_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class FakeService:
+        def __init__(self, _session_factory: object) -> None:
+            pass
+
+        async def ingest(self, _snapshot: ItemSnapshot) -> None:
+            raise asyncpg.InvalidPasswordError(
+                "password authentication failed for user postgres"
+            )
+
+    engine = FakeEngine()
+
+    def fake_create_database(_settings: object) -> tuple[FakeEngine, str]:
+        return engine, "session-factory"
+
+    monkeypatch.setattr(ingest_module, "IngestionSettings", lambda: "settings")
+    monkeypatch.setattr(ingest_module, "create_database", fake_create_database)
+    monkeypatch.setattr(ingest_module, "IngestionService", FakeService)
+
+    result = ingest_module.main(["--input", str(snapshot_path(tmp_path))])
+
+    assert result == 1
+    error = capsys.readouterr().err
+    assert error == "Ingestion failed: required service is unavailable\n"
+    assert "postgres" not in error
+
+
 def test_cli_reports_configuration_failure_separately(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    settings_class = ingest_module.Settings
+    settings_class = ingest_module.IngestionSettings
 
     def invalid_settings() -> object:
         raise ValidationError.from_exception_data(
@@ -154,7 +195,7 @@ def test_cli_reports_configuration_failure_separately(
             ],
         )
 
-    monkeypatch.setattr(ingest_module, "Settings", invalid_settings)
+    monkeypatch.setattr(ingest_module, "IngestionSettings", invalid_settings)
 
     result = ingest_module.main(["--input", str(snapshot_path(tmp_path))])
 
@@ -163,3 +204,81 @@ def test_cli_reports_configuration_failure_separately(
     assert "configuration is invalid" in error
     assert "Invalid snapshot" not in error
     assert "DATABASE_URL" not in error
+
+
+def test_cli_escapes_control_characters_in_validation_paths(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    payload = snapshot_path(tmp_path).read_text(encoding="utf-8")
+    data = json.loads(payload)
+    data["\x1b[31msecret"] = True
+    data["x" * 1000] = True
+    path = tmp_path / "invalid.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    result = ingest_module.main(["--input", str(path)])
+
+    assert result == 2
+    error = capsys.readouterr().err
+    assert "\x1b" not in error
+    assert "\\x1b[31msecret" in error
+    assert len(error) < 500
+
+
+def test_cli_sanitizes_database_configuration_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def invalid_database(_settings: object) -> tuple[FakeEngine, str]:
+        raise ValueError("invalid database URL with db-secret")
+
+    monkeypatch.setattr(ingest_module, "IngestionSettings", lambda: "settings")
+    monkeypatch.setattr(ingest_module, "create_database", invalid_database)
+
+    result = ingest_module.main(["--input", str(snapshot_path(tmp_path))])
+
+    assert result == 2
+    error = capsys.readouterr().err
+    assert error == "Ingestion failed: configuration is invalid\n"
+    assert "db-secret" not in error
+
+
+def test_cli_sanitizes_unexpected_runtime_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class FakeService:
+        def __init__(self, _session_factory: object) -> None:
+            pass
+
+        async def ingest(self, _snapshot: ItemSnapshot) -> None:
+            raise RuntimeError("driver details with db-secret")
+
+    monkeypatch.setattr(ingest_module, "IngestionSettings", lambda: "settings")
+
+    def fake_create_database(_settings: object) -> tuple[FakeEngine, str]:
+        return FakeEngine(), "session-factory"
+
+    monkeypatch.setattr(ingest_module, "create_database", fake_create_database)
+    monkeypatch.setattr(ingest_module, "IngestionService", FakeService)
+
+    result = ingest_module.main(["--input", str(snapshot_path(tmp_path))])
+
+    assert result == 1
+    error = capsys.readouterr().err
+    assert error == "Ingestion failed: unexpected internal error\n"
+    assert "db-secret" not in error
+
+
+def test_cli_rejects_invalid_arguments_without_echoing_them(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = ingest_module.main(["--unexpected", "\x1b[31msecret"])
+
+    assert result == 2
+    error = capsys.readouterr().err
+    assert error == "Invalid command-line arguments\n"
+    assert "\x1b" not in error

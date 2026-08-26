@@ -2,13 +2,20 @@ from pathlib import Path
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import CheckConstraint, DateTime, Integer, PrimaryKeyConstraint, Text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Integer,
+    PrimaryKeyConstraint,
+    Table,
+    Text,
+)
 
 from app.core.database import Base
 from app.meta.models import DatasetMetadata
 
 
-def metadata_table():
+def metadata_table() -> Table:
     return Base.metadata.tables["dataset_metadata"]
 
 

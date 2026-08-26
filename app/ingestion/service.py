@@ -29,10 +29,14 @@ class IngestionService:
         self._clock = clock
 
     async def ingest(self, snapshot: ItemSnapshot) -> datetime:
+        last_sync = self._clock()
         async with self._session_factory.begin() as session:
             repository = self._repository_factory(session)
+            await repository.acquire_lock()
+            current_last_sync = await repository.get_last_sync()
+            if current_last_sync is not None and last_sync <= current_last_sync:
+                return current_last_sync
             await repository.upsert_items(snapshot.items)
-            last_sync = self._clock()
             await repository.upsert_metadata(
                 dataset_version=snapshot.dataset_version,
                 game_version=snapshot.game_version,

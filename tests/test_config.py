@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.core.config import Settings
+from app.core.config import IngestionSettings, Settings
 
 
 def test_settings_accept_valid_runtime_configuration() -> None:
@@ -18,6 +18,22 @@ def test_settings_accept_valid_runtime_configuration() -> None:
     assert settings.log_level == "INFO"
 
 
+def test_settings_accept_safe_asyncpg_query_options() -> None:
+    settings = Settings.model_validate(
+        {
+            "database_url": (
+                "postgresql+asyncpg://user:password@localhost/isaac_api"
+                "?prepared_statement_cache_size=0"
+            ),
+            "redis_url": "redis://localhost:6379/0",
+        }
+    )
+
+    assert settings.database_url.get_secret_value().endswith(
+        "?prepared_statement_cache_size=0"
+    )
+
+
 def test_settings_require_database_and_redis_urls(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -29,10 +45,203 @@ def test_settings_require_database_and_redis_urls(
         Settings.model_validate({})
 
 
+def test_ingestion_settings_require_only_database_url(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("REDIS_URL", raising=False)
+
+    settings = IngestionSettings.model_validate(
+        {"database_url": "postgresql+asyncpg://localhost/isaac_api"}
+    )
+
+    assert settings.database_url.get_secret_value().startswith("postgresql+asyncpg://")
+
+
+def test_ingestion_settings_accept_local_unix_socket_database_url(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    for database_url in (
+        "postgresql+asyncpg:///isaac_api",
+        "postgresql+asyncpg:///isaac_api?host=%2Fvar%2Frun%2Fpostgresql",
+        "postgresql+asyncpg://user:password@/isaac_api?host=%2Fvar%2Frun%2Fpostgresql",
+    ):
+        settings = IngestionSettings.model_validate({"database_url": database_url})
+
+        assert settings.database_requires_tls is False
+
+
+@pytest.mark.parametrize("variable", ["PGHOST", "PGSERVICE"])
+def test_ingestion_settings_reject_driver_remote_target_override(
+    monkeypatch: pytest.MonkeyPatch,
+    variable: str,
+) -> None:
+    monkeypatch.setenv(variable, "database.example")
+
+    with pytest.raises(ValidationError):
+        IngestionSettings.model_validate(
+            {"database_url": "postgresql+asyncpg:///isaac_api"}
+        )
+
+
+@pytest.mark.parametrize(
+    ("variable", "database_url"),
+    [
+        ("PGPORT", "postgresql+asyncpg://database.example/isaac_api"),
+        ("PGSERVICE", "postgresql+asyncpg://database.example:5432/isaac_api"),
+        ("PGUSER", "postgresql+asyncpg://@localhost/isaac_api"),
+    ],
+)
+def test_ingestion_settings_rejects_unpinned_driver_target_fields(
+    monkeypatch: pytest.MonkeyPatch,
+    variable: str,
+    database_url: str,
+) -> None:
+    monkeypatch.setenv(variable, "5433" if variable == "PGPORT" else "remote")
+
+    with pytest.raises(ValidationError):
+        IngestionSettings.model_validate({"database_url": database_url})
+
+
+@pytest.mark.parametrize("variable", ["PGPASSWORD", "PGPASSFILE"])
+def test_ingestion_settings_rejects_empty_driver_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+    variable: str,
+) -> None:
+    monkeypatch.setenv(variable, "")
+
+    with pytest.raises(ValidationError):
+        IngestionSettings.model_validate(
+            {"database_url": "postgresql+asyncpg://user@localhost/isaac_api"}
+        )
+
+
+@pytest.mark.parametrize("variable", ["PGSSLMODE", "PGTARGETSESSIONATTRS"])
+def test_ingestion_settings_rejects_ambient_connection_options(
+    monkeypatch: pytest.MonkeyPatch,
+    variable: str,
+) -> None:
+    monkeypatch.setenv(variable, "disable")
+
+    with pytest.raises(ValidationError):
+        IngestionSettings.model_validate(
+            {"database_url": ("postgresql+asyncpg://user:password@localhost/isaac_api")}
+        )
+
+
+def test_settings_reject_ssl_keylog_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SSLKEYLOGFILE", "/tmp/postgres-keylog")
+
+    with pytest.raises(ValidationError):
+        Settings.model_validate(
+            {
+                "database_url": "postgresql+asyncpg://user:password@localhost/isaac_api",
+                "redis_url": "redis://localhost:6379/0",
+            }
+        )
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
         ("database_url", "postgresql://localhost/isaac_api"),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost:not-a-port/isaac_api",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api?host=remote.example",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api?Host=remote.example",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api#?host=remote.example",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api#",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api?sslmode=disable",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api?ssl=require",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api?database=other",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api?user=other",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api?password=other",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://user:@localhost/isaac_api",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api?passfile=/tmp/pgpass",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://u:p@remote@@localhost/isaac_api",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://host1,host2:5432/isaac_api",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api?prepared_statement_cache_size=abc",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api?prepared_statement_cache_size=-1",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api?prepared_statement_cache_size=",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api?prepared_statement_cache_size=1&prepared_statement_cache_size=2",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api?prepared_statement_cache_size=0&PREPARED_STATEMENT_CACHE_SIZE=999",
+        ),
+        ("database_url", "postgresql+asyncpg://localhost"),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost:0/isaac_api",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg:///isaac_api?host=%2Flocal%2Cremote",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg:///isaac_api?service=remote",
+        ),
         ("redis_url", "http://localhost:6379/0"),
     ],
 )
@@ -45,6 +254,30 @@ def test_settings_reject_incompatible_url_schemes(field: str, value: str) -> Non
 
     with pytest.raises(ValidationError):
         Settings.model_validate(values)
+
+
+def test_production_ingestion_requires_explicit_database_target() -> None:
+    with pytest.raises(ValidationError):
+        IngestionSettings.model_validate(
+            {
+                "environment": "production",
+                "database_url": "postgresql+asyncpg:///isaac_api",
+            }
+        )
+
+
+def test_ingestion_settings_require_user_for_remote_database() -> None:
+    with pytest.raises(ValidationError):
+        IngestionSettings.model_validate(
+            {"database_url": "postgresql+asyncpg://database.example/isaac_api"}
+        )
+
+
+def test_ingestion_settings_require_password_for_remote_database() -> None:
+    with pytest.raises(ValidationError):
+        IngestionSettings.model_validate(
+            {"database_url": "postgresql+asyncpg://user@database.example/isaac_api"}
+        )
 
 
 def test_settings_repr_does_not_expose_credentials() -> None:

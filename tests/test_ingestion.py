@@ -5,6 +5,7 @@ from typing import Any, cast
 import pytest
 from pydantic import ValidationError
 
+from app.ingestion import loader as loader_module
 from app.ingestion.loader import SnapshotLoadError, load_snapshot
 from app.ingestion.schemas import ItemSnapshot
 
@@ -52,6 +53,12 @@ def test_load_snapshot_accepts_camel_case_and_strips_strings(tmp_path: Path) -> 
         ("name", "   "),
         ("quality", 5),
         ("imageUrl", "ftp://example.com/118.png"),
+        ("imageUrl", "https://:443/118.png"),
+        ("imageUrl", "https://example.com:bad/118.png"),
+        ("imageUrl", "https:example.com/118.png"),
+        ("imageUrl", "http:/example.com/118.png"),
+        ("imageUrl", "https://user:password@example.com/118.png"),
+        ("gameId", 2147483648),
     ],
 )
 def test_snapshot_rejects_invalid_item_fields(field: str, value: object) -> None:
@@ -72,6 +79,56 @@ def test_snapshot_rejects_duplicate_game_ids() -> None:
 
     with pytest.raises(ValidationError, match="gameId"):
         ItemSnapshot.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "datasetVersion",
+        "gameVersion",
+        "name",
+        "description",
+        "type",
+        "rechargeTime",
+        "introducedInVersion",
+    ],
+)
+def test_snapshot_rejects_nul_in_persisted_strings(field: str) -> None:
+    payload = valid_payload()
+    if field in {"datasetVersion", "gameVersion"}:
+        payload[field] = "value\x00"
+    else:
+        items = payload["items"]
+        assert isinstance(items, list)
+        assert isinstance(items[0], dict)
+        items[0][field] = "value\x00"
+
+    with pytest.raises(ValidationError):
+        ItemSnapshot.model_validate(payload)
+
+
+def test_snapshot_fails_fast_on_invalid_items() -> None:
+    payload = valid_payload()
+    items = payload["items"]
+    assert isinstance(items, list)
+    assert isinstance(items[0], dict)
+    item = cast(dict[str, Any], items[0])
+    payload["items"] = [dict(item, name="") for _ in range(1000)]
+
+    with pytest.raises(ValidationError) as error:
+        ItemSnapshot.model_validate(payload)
+
+    assert len(error.value.errors()) == 1
+
+
+def test_snapshot_fails_fast_on_unknown_top_level_fields() -> None:
+    payload = valid_payload()
+    payload.update({f"unknown{index}": True for index in range(1000)})
+
+    with pytest.raises(ValidationError) as error:
+        ItemSnapshot.model_validate(payload)
+
+    assert len(error.value.errors()) == 1
 
 
 @pytest.mark.parametrize(
@@ -103,3 +160,59 @@ def test_load_snapshot_rejects_invalid_json(tmp_path: Path) -> None:
 def test_load_snapshot_rejects_missing_file(tmp_path: Path) -> None:
     with pytest.raises(SnapshotLoadError):
         load_snapshot(tmp_path / "missing.json")
+
+
+def test_load_snapshot_rejects_non_regular_file(tmp_path: Path) -> None:
+    with pytest.raises(SnapshotLoadError, match="regular file"):
+        load_snapshot(tmp_path)
+
+
+def test_load_snapshot_rejects_symlink(tmp_path: Path) -> None:
+    target = tmp_path / "items.json"
+    target.write_text(json.dumps(valid_payload()), encoding="utf-8")
+    link = tmp_path / "items-link.json"
+    link.symlink_to(target)
+
+    with pytest.raises(SnapshotLoadError):
+        load_snapshot(link)
+
+
+def test_snapshot_requires_quality_field() -> None:
+    payload = valid_payload()
+    items = payload["items"]
+    assert isinstance(items, list)
+    assert isinstance(items[0], dict)
+    del items[0]["quality"]
+
+    with pytest.raises(ValidationError):
+        ItemSnapshot.model_validate(payload)
+
+
+def test_snapshot_accepts_long_http_url() -> None:
+    payload = valid_payload()
+    items = payload["items"]
+    assert isinstance(items, list)
+    assert isinstance(items[0], dict)
+    items[0]["imageUrl"] = "https://example.com/" + "x" * 2100
+
+    ItemSnapshot.model_validate(payload)
+
+
+def test_load_snapshot_rejects_json_integer_overflow(tmp_path: Path) -> None:
+    path = tmp_path / "items.json"
+    path.write_text("9" * 4301, encoding="utf-8")
+
+    with pytest.raises(SnapshotLoadError):
+        load_snapshot(path)
+
+
+def test_load_snapshot_rejects_oversized_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(loader_module, "MAX_SNAPSHOT_BYTES", 10)
+    path = tmp_path / "items.json"
+    path.write_text("{" + " " * 10 + "}", encoding="utf-8")
+
+    with pytest.raises(SnapshotLoadError):
+        load_snapshot(path)

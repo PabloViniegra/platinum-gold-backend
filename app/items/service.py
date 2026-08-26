@@ -59,19 +59,14 @@ class ItemService:
         return to_item_response(item)
 
     async def get_meta(self, api_version: str) -> MetaResponse:
-        total = await self._repository.count_items(
-            search=None,
-            quality=None,
-            item_type=None,
-            version=None,
-        )
-        metadata = await self._repository.get_metadata()
+        catalog_meta = await self._repository.get_catalog_meta()
+        metadata = catalog_meta.metadata
         return MetaResponse(
             api_version=api_version,
             dataset_version=None if metadata is None else metadata.dataset_version,
             game_version=None if metadata is None else metadata.game_version,
             last_sync=None if metadata is None else metadata.last_sync,
-            items=total,
+            items=catalog_meta.items,
         )
 
 

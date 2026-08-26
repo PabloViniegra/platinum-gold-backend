@@ -1,9 +1,9 @@
 import os
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
@@ -57,6 +57,8 @@ async def database_session() -> AsyncIterator[AsyncSession]:
                 join_transaction_mode="create_savepoint",
             )
             try:
+                await session.execute(delete(Item))
+                await session.execute(delete(DatasetMetadata))
                 yield session
             finally:
                 try:
@@ -122,6 +124,57 @@ def item_payload(
         "imageUrl": f"https://example.com/{game_id}.png",
         "introducedInVersion": "repentance",
     }
+
+
+async def capture_item_state(
+    session: AsyncSession,
+    game_id: int,
+) -> dict[str, object] | None:
+    item = await session.scalar(select(Item).where(Item.game_id == game_id))
+    if item is None:
+        return None
+    return {
+        "id": item.id,
+        "game_id": item.game_id,
+        "name": item.name,
+        "description": item.description,
+        "quality": item.quality,
+        "item_type": item.item_type,
+        "recharge_time": item.recharge_time,
+        "image_url": item.image_url,
+        "introduced_in_version": item.introduced_in_version,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+async def capture_metadata_state(
+    session: AsyncSession,
+) -> dict[str, object] | None:
+    metadata = await session.scalar(select(DatasetMetadata))
+    if metadata is None:
+        return None
+    return {
+        "id": metadata.id,
+        "dataset_version": metadata.dataset_version,
+        "game_version": metadata.game_version,
+        "last_sync": metadata.last_sync,
+    }
+
+
+async def restore_test_state(
+    session_factory: async_sessionmaker[AsyncSession],
+    game_id: int,
+    item_state: dict[str, object] | None,
+    metadata_state: dict[str, object] | None,
+) -> None:
+    async with session_factory.begin() as session:
+        await session.execute(delete(Item).where(Item.game_id == game_id))
+        if item_state is not None:
+            await session.execute(insert(Item).values(item_state))
+        await session.execute(delete(DatasetMetadata))
+        if metadata_state is not None:
+            await session.execute(insert(DatasetMetadata).values(metadata_state))
 
 
 @pytest.mark.asyncio
@@ -208,6 +261,13 @@ async def test_repository_repeating_snapshot_keeps_one_row(
         last_sync=sync_time,
     )
     await database_session.flush()
+    older_sync = datetime(2026, 8, 26, 11, 30, tzinfo=UTC)
+    await repository.upsert_metadata(
+        dataset_version=repeated_snapshot.dataset_version,
+        game_version=repeated_snapshot.game_version,
+        last_sync=older_sync,
+    )
+    await database_session.flush()
 
     rows = (
         await database_session.scalars(
@@ -219,7 +279,27 @@ async def test_repository_repeating_snapshot_keeps_one_row(
     assert len(rows) == 1
     assert rows[0].name == "Repeated Item"
     assert metadata is not None
+    await database_session.refresh(metadata)
     assert metadata.dataset_version == repeated_snapshot.dataset_version
+    assert metadata.last_sync == sync_time
+
+    stale_snapshot = ItemSnapshot.model_validate(
+        {
+            "datasetVersion": "platinum-god-2026-08-25",
+            "gameVersion": "rebirth",
+            "items": repeated_snapshot.model_dump(by_alias=True)["items"],
+        }
+    )
+    await repository.upsert_metadata(
+        dataset_version=stale_snapshot.dataset_version,
+        game_version=stale_snapshot.game_version,
+        last_sync=older_sync,
+    )
+    await database_session.flush()
+    await database_session.refresh(metadata)
+
+    assert metadata.dataset_version == repeated_snapshot.dataset_version
+    assert metadata.game_version == repeated_snapshot.game_version
     assert metadata.last_sync == sync_time
 
 
@@ -230,16 +310,12 @@ async def test_ingestion_service_commit_is_visible_to_new_session(
     game_id = 200001
     sync_time = datetime(2026, 8, 26, 13, 30, tzinfo=UTC)
     async with committed_session_factory() as session:
-        existing_metadata = await session.scalar(select(DatasetMetadata))
-        previous_metadata = (
-            None
-            if existing_metadata is None
-            else (
-                existing_metadata.dataset_version,
-                existing_metadata.game_version,
-                existing_metadata.last_sync,
-            )
-        )
+        previous_item = await capture_item_state(session, game_id)
+        previous_metadata = await capture_metadata_state(session)
+    if previous_metadata is not None:
+        previous_sync = previous_metadata["last_sync"]
+        if isinstance(previous_sync, datetime):
+            sync_time = max(sync_time, previous_sync + timedelta(microseconds=1))
 
     try:
         await IngestionService(
@@ -262,21 +338,12 @@ async def test_ingestion_service_commit_is_visible_to_new_session(
         assert metadata is not None
         assert metadata.last_sync == sync_time
     finally:
-        async with committed_session_factory.begin() as session:
-            await session.execute(delete(Item).where(Item.game_id == game_id))
-            if previous_metadata is None:
-                await session.execute(delete(DatasetMetadata))
-            else:
-                dataset_version, game_version, last_sync = previous_metadata
-                await session.execute(
-                    update(DatasetMetadata)
-                    .where(DatasetMetadata.id == 1)
-                    .values(
-                        dataset_version=dataset_version,
-                        game_version=game_version,
-                        last_sync=last_sync,
-                    )
-                )
+        await restore_test_state(
+            committed_session_factory,
+            game_id,
+            previous_item,
+            previous_metadata,
+        )
 
 
 class FailingMetadataRepository(SqlAlchemyIngestionRepository):
@@ -295,41 +362,42 @@ async def test_ingestion_service_rolls_back_items_when_metadata_fails(
     committed_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     game_id = 200002
+    sync_time = datetime(2026, 8, 26, 13, 30, tzinfo=UTC)
     async with committed_session_factory() as session:
-        existing_metadata = await session.scalar(select(DatasetMetadata))
-        previous_metadata = (
-            None
-            if existing_metadata is None
-            else (
-                existing_metadata.dataset_version,
-                existing_metadata.game_version,
-                existing_metadata.last_sync,
-            )
-        )
+        previous_item = await capture_item_state(session, game_id)
+        previous_metadata = await capture_metadata_state(session)
+    if previous_metadata is not None:
+        previous_sync = previous_metadata["last_sync"]
+        if isinstance(previous_sync, datetime):
+            sync_time = max(sync_time, previous_sync + timedelta(microseconds=1))
 
-    with pytest.raises(RuntimeError, match="metadata write failed"):
-        await IngestionService(
+    try:
+        with pytest.raises(RuntimeError, match="metadata write failed"):
+            await IngestionService(
+                committed_session_factory,
+                repository_factory=FailingMetadataRepository,
+                clock=lambda: sync_time,
+            ).ingest(
+                snapshot(
+                    item_payload(
+                        game_id,
+                        "Rolled Back Item",
+                        quality=1,
+                        item_type="active",
+                    )
+                )
+            )
+
+        async with committed_session_factory() as session:
+            persisted = await capture_item_state(session, game_id)
+            metadata = await capture_metadata_state(session)
+
+        assert persisted == previous_item
+        assert metadata == previous_metadata
+    finally:
+        await restore_test_state(
             committed_session_factory,
-            repository_factory=FailingMetadataRepository,
-        ).ingest(
-            snapshot(
-                item_payload(game_id, "Rolled Back Item", quality=1, item_type="active")
-            )
+            game_id,
+            previous_item,
+            previous_metadata,
         )
-
-    async with committed_session_factory() as session:
-        persisted = await session.scalar(
-            select(Item).where(Item.game_id == game_id),
-        )
-        metadata = await session.scalar(select(DatasetMetadata))
-
-    assert persisted is None
-    if previous_metadata is None:
-        assert metadata is None
-    else:
-        assert metadata is not None
-        assert (
-            metadata.dataset_version,
-            metadata.game_version,
-            metadata.last_sync,
-        ) == previous_metadata

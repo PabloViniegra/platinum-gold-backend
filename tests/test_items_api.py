@@ -7,7 +7,7 @@ from app.auth.dependencies import get_api_key_verifier
 from app.auth.principal import ApiPrincipal
 from app.core.config import Settings
 from app.items.dependencies import get_item_repository
-from app.items.repository import DatasetMetadataRecord, ItemRecord
+from app.items.repository import CatalogMetaRecord, DatasetMetadataRecord, ItemRecord
 from app.main import create_app
 
 
@@ -38,8 +38,8 @@ class FakeItemRepository:
         self.items = items or []
         self.metadata = metadata
 
-    async def get_metadata(self) -> DatasetMetadataRecord | None:
-        return self.metadata
+    async def get_catalog_meta(self) -> CatalogMetaRecord:
+        return CatalogMetaRecord(items=len(self.items), metadata=self.metadata)
 
     async def get_by_game_id(self, game_id: int) -> ItemRecord | None:
         return next((item for item in self.items if item.game_id == game_id), None)

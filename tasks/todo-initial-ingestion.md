@@ -228,20 +228,20 @@ introducidos por esta slice.
 
 **Acceptance criteria:**
 
-- [ ] La revision de calidad no encuentra regresiones sin resolver.
-- [ ] La revision de seguridad no encuentra credenciales, logs sensibles ni
+- [x] La revision de calidad no encuentra regresiones sin resolver.
+- [x] La revision de seguridad no encuentra credenciales, logs sensibles ni
   rutas de escritura remota fuera del alcance aprobado.
-- [ ] El worktree queda con verificaciones finales documentadas y listo para
+- [x] El worktree queda con verificaciones finales documentadas y listo para
   el flujo de shipping.
 
 **Verification:**
 
-- [ ] `git diff --check`
-- [ ] `uv run pytest`
-- [ ] `uv run ruff check .`
-- [ ] `uv run ruff format --check .`
-- [ ] `uv run pyright`
-- [ ] Review con `code-reviewer`, `python-reviewer` y `security-reviewer`
+- [x] `git diff --check`
+- [x] `uv run pytest`
+- [x] `uv run ruff check .`
+- [x] `uv run ruff format --check .`
+- [x] `uv run pyright`
+- [x] Review con `code-reviewer`, `python-reviewer` y `security-reviewer`
 
 **Dependencies:** Task 7
 
@@ -254,17 +254,17 @@ introducidos por esta slice.
 
 ## Checkpoint: After Tasks 1-2
 
-- [ ] El contrato de entrada y la tabla de metadata están definidos y
+- [x] El contrato de entrada y la tabla de metadata están definidos y
   verificables.
-- [ ] La suite base permanece en verde.
+- [x] La suite base permanece en verde.
 
 ## Checkpoint: After Tasks 3-5
 
-- [ ] Un snapshot válido atraviesa persistencia, transacción y CLI.
-- [ ] Un fallo no deja cambios parciales.
+- [x] Un snapshot válido atraviesa persistencia, transacción y CLI.
+- [x] Un fallo no deja cambios parciales.
 
 ## Checkpoint: Complete
 
-- [ ] Todos los criterios de `tasks/spec-initial-ingestion.md` están cubiertos.
-- [ ] Base e integración opt-in pasan junto con Ruff y Pyright.
-- [ ] La revisión de calidad y seguridad está resuelta.
+- [x] Todos los criterios de `tasks/spec-initial-ingestion.md` están cubiertos.
+- [x] Base e integración opt-in pasan junto con Ruff y Pyright.
+- [x] La revisión de calidad y seguridad está resuelta.

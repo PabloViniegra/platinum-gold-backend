@@ -57,10 +57,11 @@ Reglas de validacion:
 - `gameVersion` es opcional y, cuando existe, no puede estar vacio.
 - `items` es obligatorio, es una lista no vacia y no contiene `gameId`
   repetidos.
-- `gameId` es un entero positivo.
+- `gameId` es un entero positivo representable por la columna PostgreSQL
+  `INTEGER` (`1` a `2147483647`).
 - `name`, `description` e `imageUrl` son strings no vacios despues de quitar
   espacios exteriores. `imageUrl` debe usar `http` o `https`.
-- `quality` es `null` o un entero entre `0` y `4`.
+- `quality` es obligatorio y puede ser `null` o un entero entre `0` y `4`.
 - `type`, `rechargeTime` e `introducedInVersion` son opcionales; si se
   proporcionan, son strings no vacios.
 - Se rechazan JSON invalido, campos desconocidos, tipos incompatibles y
@@ -84,8 +85,17 @@ forma parte de esta slice.
   slice.
 - Tras aplicar todos los upserts, la misma transaccion crea o actualiza una
   fila singleton de metadata con `dataset_version`, `game_version` y
-  `last_sync` UTC. `last_sync` se escribe solo cuando toda la operacion puede
-  confirmarse.
+  `last_sync` UTC, sin retroceder si dos ejecuciones concurrentes llegan con
+  relojes desordenados. `last_sync` se escribe solo cuando toda la operacion
+  puede confirmarse.
+- Si el reloj de una ejecucion no produce un `last_sync` posterior al ya
+  registrado, la ejecucion es un no-op exitoso: no modifica items ni metadata y
+  devuelve el `last_sync` existente. Esto evita que una ejecucion obsoleta
+  reemplace una publicacion ya confirmada.
+- `datasetVersion` es una etiqueta opaca y no se usa para inferir orden entre
+  snapshots. La seleccion de la revision upstream correcta ocurre antes de
+  ejecutar este comando; la proteccion de esta slice solo ordena ejecuciones
+  por su timestamp UTC.
 - Repetir el mismo snapshot es idempotente respecto al conjunto y contenido
   de items: no crea duplicados y deja la misma metadata de dataset. El cambio
   de `last_sync` identifica la nueva ejecucion exitosa.
@@ -96,8 +106,9 @@ ejecuciones (`scrape_runs`) en esta slice.
 
 ## Failure Behavior
 
-- Error al abrir o decodificar el fichero: el comando termina con codigo
-  distinto de cero y no toca PostgreSQL.
+- Error al abrir o decodificar el fichero, una ruta que no sea un fichero regular
+  o un snapshot que supere 5 MiB: el comando termina con codigo distinto de cero
+  y no toca PostgreSQL.
 - Error de validacion: el comando termina con codigo distinto de cero,
   muestra rutas de campos invalidos sin secretos y no toca PostgreSQL.
 - Error en cualquier upsert o en la metadata: se revierte la transaccion
@@ -151,7 +162,10 @@ uv run pyright
 El comando exige una ruta de entrada explicita y usa `DATABASE_URL` para la
 conexion. No tiene una opcion que permita apuntar por accidente a una URL
 remota desde la ruta de integracion local; la proteccion existente de
-`TEST_DATABASE_URL` se mantiene.
+`TEST_DATABASE_URL` se mantiene. La configuracion de ingesta requiere un nombre
+de base y credenciales explicitos para destinos remotos, rechaza overrides de
+`PGHOST`, `PGPORT`, `PGSERVICE`, `PGUSER` y credenciales ambientales, y solo
+permite opciones asyncpg no relacionadas con el destino.
 
 ## Project Structure
 
@@ -194,13 +208,17 @@ Los schemas de entrada permanecen separados de los modelos SQLAlchemy. La
 validacion se expresa en el tipo y el servicio recibe un snapshot ya validado:
 
 ```python
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 
 class ItemImport(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        strict=True,
+        str_strip_whitespace=True,
+    )
 
-    game_id: int = Field(gt=0, alias="gameId")
+    game_id: StrictInt = Field(gt=0, alias="gameId")
     name: str
     description: str
     image_url: str = Field(alias="imageUrl")
