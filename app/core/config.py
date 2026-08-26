@@ -6,6 +6,8 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DATABASE_QUERY_OPTIONS = frozenset({"prepared_statement_cache_size"})
+MAX_PREPARED_STATEMENT_CACHE_SIZE = 1000
+INGESTION_UNIX_SOCKET_PATHS = frozenset({"/run/postgresql", "/var/run/postgresql"})
 DATABASE_ENVIRONMENT_OVERRIDES = frozenset(
     {
         "PGHOST",
@@ -29,6 +31,8 @@ DATABASE_ENVIRONMENT_OVERRIDES = frozenset(
         "PGKRBSRVNAME",
         "PGGSSLIB",
         "SSLKEYLOGFILE",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
     }
 )
 
@@ -49,6 +53,23 @@ def validate_database_url(value: object) -> object:
         prepared_cache_values = normalized_query_values.get(
             "prepared_statement_cache_size", []
         )
+        prepared_cache_size_valid = False
+        if len(prepared_cache_values) == 1:
+            prepared_cache_value = prepared_cache_values[0]
+            normalized_cache_value = prepared_cache_value.lstrip("0") or "0"
+            maximum_cache_value = str(MAX_PREPARED_STATEMENT_CACHE_SIZE)
+            prepared_cache_size_valid = (
+                len(prepared_cache_value) <= len(maximum_cache_value)
+                and prepared_cache_value.isascii()
+                and prepared_cache_value.isdigit()
+                and (
+                    len(normalized_cache_value) < len(maximum_cache_value)
+                    or (
+                        len(normalized_cache_value) == len(maximum_cache_value)
+                        and normalized_cache_value <= maximum_cache_value
+                    )
+                )
+            )
         decoded_hostname = (
             unquote(parsed.hostname) if parsed.hostname is not None else ""
         )
@@ -87,6 +108,11 @@ def validate_database_url(value: object) -> object:
                 or character in invalid_hostname_characters
                 for character in decoded_hostname
             )
+            or any(
+                character.isspace() or ord(character) < 32 or ord(character) == 127
+                for host in query_hosts
+                for character in host
+            )
             or parsed.netloc.endswith(":")
             or (port is not None and not 1 <= port <= 65535)
             or parsed.path in {"", "/"}
@@ -94,11 +120,7 @@ def validate_database_url(value: object) -> object:
             - (DATABASE_QUERY_OPTIONS | ({"host"} if unix_socket else set()))
             or (
                 "prepared_statement_cache_size" in query_keys
-                and (
-                    len(prepared_cache_values) != 1
-                    or not prepared_cache_values[0].isascii()
-                    or not prepared_cache_values[0].isdigit()
-                )
+                and not prepared_cache_size_valid
             )
         ):
             raise ValueError
@@ -138,12 +160,6 @@ class PostgresSettings(BaseSettings):
         if database.hostname is None and "host" not in database_query_keys:
             raise ValueError("Production DATABASE_URL must specify a host or socket")
 
-        return self
-
-    @model_validator(mode="after")
-    def reject_database_driver_environment(self) -> "PostgresSettings":
-        if any(variable in os.environ for variable in DATABASE_ENVIRONMENT_OVERRIDES):
-            raise ValueError("DATABASE_URL must not use driver environment overrides")
         return self
 
     @property
@@ -190,6 +206,25 @@ class Settings(PostgresSettings):
 
 
 class IngestionSettings(PostgresSettings):
+    @model_validator(mode="after")
+    def require_explicit_database_target(self) -> "IngestionSettings":
+        database = urlsplit(self.database_url.get_secret_value())
+        query_values = parse_qs(database.query, keep_blank_values=True)
+        socket_hosts = query_values.get("host", [])
+        if database.hostname is None and (
+            len(socket_hosts) != 1 or socket_hosts[0] not in INGESTION_UNIX_SOCKET_PATHS
+        ):
+            raise ValueError(
+                "Ingestion DATABASE_URL must specify a hostname or approved socket"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def reject_database_driver_environment(self) -> "IngestionSettings":
+        if any(variable in os.environ for variable in DATABASE_ENVIRONMENT_OVERRIDES):
+            raise ValueError("DATABASE_URL must not use driver environment overrides")
+        return self
+
     @model_validator(mode="after")
     def require_remote_database_credentials(self) -> "IngestionSettings":
         database = urlsplit(self.database_url.get_secret_value())

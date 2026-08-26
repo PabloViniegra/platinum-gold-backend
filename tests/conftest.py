@@ -27,5 +27,7 @@ def clear_postgres_driver_environment(
         "PGKRBSRVNAME",
         "PGGSSLIB",
         "SSLKEYLOGFILE",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
     ):
         monkeypatch.delenv(variable, raising=False)

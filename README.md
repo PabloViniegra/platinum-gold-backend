@@ -111,10 +111,12 @@ Non-loopback PostgreSQL connections use verified TLS in every environment.
 Remote production Redis must use `rediss://`. Local loopback and Unix-socket
 connections may remain unencrypted for development.
 
-The ingestion command requires the database name and remote credentials in
-`DATABASE_URL`; it rejects driver environment overrides and routing or TLS
+The ingestion command requires an explicit database hostname or the approved
+local socket directories (`/run/postgresql` or `/var/run/postgresql`), plus the
+database name and remote credentials in `DATABASE_URL`; it rejects driver
+environment overrides, ambient trust stores, key logging, and routing or TLS
 query parameters. The asyncpg `prepared_statement_cache_size` option remains
-supported.
+supported from `0` through `1000`.
 
 Do not embed API keys intended for server-to-server use in public browser
 JavaScript.

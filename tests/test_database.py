@@ -1,4 +1,5 @@
 import ssl
+from pathlib import Path
 
 import pytest
 
@@ -56,6 +57,25 @@ def test_remote_database_tls_disables_key_logging(
 
     assert isinstance(context, ssl.SSLContext)
     assert context.keylog_filename is None
+
+
+def test_remote_database_tls_does_not_create_keylog_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    settings = IngestionSettings.model_validate(
+        {
+            "database_url": (
+                "postgresql+asyncpg://user:password@database.example/isaac_api"
+            )
+        }
+    )
+    keylog_path = tmp_path / "postgres-keylog"
+    monkeypatch.setenv("SSLKEYLOGFILE", str(keylog_path))
+
+    database_connect_args(settings)
+
+    assert not keylog_path.exists()
 
 
 def test_database_command_timeout_matches_dependency_timeout() -> None:

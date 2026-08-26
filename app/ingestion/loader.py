@@ -12,14 +12,53 @@ class SnapshotLoadError(ValueError):
     pass
 
 
+def _open_snapshot_descriptor(path: Path) -> int:
+    if (
+        os.open in os.supports_dir_fd
+        and hasattr(os, "O_DIRECTORY")
+        and hasattr(os, "O_NOFOLLOW")
+    ):
+        directory_flags = (
+            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | os.O_DIRECTORY | os.O_NOFOLLOW
+        )
+        file_flags = (
+            os.O_RDONLY
+            | getattr(os, "O_CLOEXEC", 0)
+            | os.O_NOFOLLOW
+            | getattr(os, "O_NONBLOCK", 0)
+        )
+        parts = path.parts
+        if path.is_absolute():
+            directory_descriptor = os.open(path.anchor, directory_flags)
+            parts = parts[1:]
+        else:
+            directory_descriptor = os.open(".", directory_flags)
+        try:
+            if not parts:
+                raise SnapshotLoadError("Snapshot path is not a regular file")
+            for part in parts[:-1]:
+                next_descriptor = os.open(
+                    part,
+                    directory_flags,
+                    dir_fd=directory_descriptor,
+                )
+                os.close(directory_descriptor)
+                directory_descriptor = next_descriptor
+            return os.open(
+                parts[-1],
+                file_flags,
+                dir_fd=directory_descriptor,
+            )
+        finally:
+            os.close(directory_descriptor)
+
+    raise SnapshotLoadError("Secure snapshot opening is unavailable")
+
+
 def _read_snapshot_bytes(path: Path) -> bytes:
-    flags = os.O_RDONLY
-    flags |= getattr(os, "O_CLOEXEC", 0)
-    flags |= getattr(os, "O_NOFOLLOW", 0)
-    flags |= getattr(os, "O_NONBLOCK", 0)
     descriptor: int | None = None
     try:
-        descriptor = os.open(path, flags)
+        descriptor = _open_snapshot_descriptor(path)
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
             raise SnapshotLoadError("Snapshot path is not a regular file")
         snapshot_file = os.fdopen(descriptor, "rb")

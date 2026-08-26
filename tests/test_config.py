@@ -1,4 +1,6 @@
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import pytest
 from pydantic import ValidationError
@@ -68,7 +70,6 @@ def test_ingestion_settings_accept_local_unix_socket_database_url(
     monkeypatch.delenv("DATABASE_URL", raising=False)
 
     for database_url in (
-        "postgresql+asyncpg:///isaac_api",
         "postgresql+asyncpg:///isaac_api?host=%2Fvar%2Frun%2Fpostgresql",
         "postgresql+asyncpg://user:password@/isaac_api?host=%2Fvar%2Frun%2Fpostgresql",
     ):
@@ -86,16 +87,25 @@ def test_ingestion_settings_reject_driver_remote_target_override(
 
     with pytest.raises(ValidationError):
         IngestionSettings.model_validate(
-            {"database_url": "postgresql+asyncpg:///isaac_api"}
+            {"database_url": ("postgresql+asyncpg://user:password@localhost/isaac_api")}
         )
 
 
 @pytest.mark.parametrize(
     ("variable", "database_url"),
     [
-        ("PGPORT", "postgresql+asyncpg://database.example/isaac_api"),
-        ("PGSERVICE", "postgresql+asyncpg://database.example:5432/isaac_api"),
-        ("PGUSER", "postgresql+asyncpg://@localhost/isaac_api"),
+        (
+            "PGPORT",
+            "postgresql+asyncpg://user:password@database.example/isaac_api",
+        ),
+        (
+            "PGSERVICE",
+            "postgresql+asyncpg://user:password@database.example:5432/isaac_api",
+        ),
+        (
+            "PGUSER",
+            "postgresql+asyncpg://user:password@localhost/isaac_api",
+        ),
     ],
 )
 def test_ingestion_settings_rejects_unpinned_driver_target_fields(
@@ -122,7 +132,10 @@ def test_ingestion_settings_rejects_empty_driver_credentials(
         )
 
 
-@pytest.mark.parametrize("variable", ["PGSSLMODE", "PGTARGETSESSIONATTRS"])
+@pytest.mark.parametrize(
+    "variable",
+    ["PGSSLMODE", "PGTARGETSESSIONATTRS", "SSL_CERT_FILE", "SSL_CERT_DIR"],
+)
 def test_ingestion_settings_rejects_ambient_connection_options(
     monkeypatch: pytest.MonkeyPatch,
     variable: str,
@@ -135,18 +148,33 @@ def test_ingestion_settings_rejects_ambient_connection_options(
         )
 
 
-def test_settings_reject_ssl_keylog_environment(
+def test_ingestion_settings_reject_ssl_keylog_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SSLKEYLOGFILE", "/tmp/postgres-keylog")
 
     with pytest.raises(ValidationError):
-        Settings.model_validate(
-            {
-                "database_url": "postgresql+asyncpg://user:password@localhost/isaac_api",
-                "redis_url": "redis://localhost:6379/0",
-            }
+        IngestionSettings.model_validate(
+            {"database_url": "postgresql+asyncpg://user:password@localhost/isaac_api"}
         )
+
+
+@pytest.mark.parametrize("variable", ["PGHOST", "SSLKEYLOGFILE"])
+def test_runtime_settings_allow_driver_environment_compatibility(
+    monkeypatch: pytest.MonkeyPatch,
+    variable: str,
+) -> None:
+    monkeypatch.setenv(variable, "ambient-value")
+
+    monkeypatch.setenv(
+        "DATABASE_URL", "postgresql+asyncpg://user:password@localhost/isaac_api"
+    )
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+
+    settings_factory = cast(Callable[[], Settings], Settings)
+    settings = settings_factory()
+
+    assert settings.database_url.get_secret_value().endswith("/isaac_api")
 
 
 @pytest.mark.parametrize(
@@ -229,6 +257,10 @@ def test_settings_reject_ssl_keylog_environment(
             "database_url",
             "postgresql+asyncpg://localhost/isaac_api?prepared_statement_cache_size=0&PREPARED_STATEMENT_CACHE_SIZE=999",
         ),
+        (
+            "database_url",
+            "postgresql+asyncpg://localhost/isaac_api?prepared_statement_cache_size=1001",
+        ),
         ("database_url", "postgresql+asyncpg://localhost"),
         (
             "database_url",
@@ -237,6 +269,10 @@ def test_settings_reject_ssl_keylog_environment(
         (
             "database_url",
             "postgresql+asyncpg:///isaac_api?host=%2Flocal%2Cremote",
+        ),
+        (
+            "database_url",
+            "postgresql+asyncpg:///isaac_api?host=%2Ftmp%2Fpg%00socket",
         ),
         (
             "database_url",
@@ -256,12 +292,36 @@ def test_settings_reject_incompatible_url_schemes(field: str, value: str) -> Non
         Settings.model_validate(values)
 
 
-def test_production_ingestion_requires_explicit_database_target() -> None:
+@pytest.mark.parametrize("environment", ["development", "test", "production"])
+def test_ingestion_settings_require_explicit_database_target(
+    environment: str,
+) -> None:
     with pytest.raises(ValidationError):
         IngestionSettings.model_validate(
             {
-                "environment": "production",
+                "environment": environment,
                 "database_url": "postgresql+asyncpg:///isaac_api",
+            }
+        )
+
+
+def test_ingestion_settings_reject_unapproved_socket_directory() -> None:
+    with pytest.raises(ValidationError):
+        IngestionSettings.model_validate(
+            {"database_url": "postgresql+asyncpg:///isaac_api?host=%2Ftmp"}
+        )
+
+
+def test_settings_rejects_oversized_cache_representation() -> None:
+    cache_size = "0" * 4301 + "1"
+    with pytest.raises(ValidationError):
+        Settings.model_validate(
+            {
+                "database_url": (
+                    "postgresql+asyncpg://localhost/isaac_api?"
+                    f"prepared_statement_cache_size={cache_size}"
+                ),
+                "redis_url": "redis://localhost:6379/0",
             }
         )
 

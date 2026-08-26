@@ -1,3 +1,4 @@
+import asyncio
 import os
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
@@ -355,6 +356,155 @@ class FailingMetadataRepository(SqlAlchemyIngestionRepository):
         last_sync: datetime,
     ) -> None:
         raise RuntimeError("metadata write failed")
+
+
+class HoldingLockRepository(SqlAlchemyIngestionRepository):
+    def __init__(
+        self,
+        session: AsyncSession,
+        lock_acquired: asyncio.Event,
+        release_lock: asyncio.Event,
+    ) -> None:
+        super().__init__(session)
+        self._lock_acquired = lock_acquired
+        self._release_lock = release_lock
+
+    async def acquire_lock(self) -> None:
+        await super().acquire_lock()
+        self._lock_acquired.set()
+        await self._release_lock.wait()
+
+
+class WaitingLockRepository(SqlAlchemyIngestionRepository):
+    def __init__(self, session: AsyncSession, lock_requested: asyncio.Event) -> None:
+        super().__init__(session)
+        self._lock_requested = lock_requested
+
+    async def acquire_lock(self) -> None:
+        self._lock_requested.set()
+        await super().acquire_lock()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_ingestions_make_older_run_a_noop(
+    committed_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    older_game_id = 200003
+    newer_game_id = 200004
+    async with committed_session_factory() as session:
+        previous_older_item = await capture_item_state(session, older_game_id)
+        previous_newer_item = await capture_item_state(session, newer_game_id)
+        previous_metadata = await capture_metadata_state(session)
+
+    newer_sync = datetime(2026, 8, 26, 14, 30, tzinfo=UTC)
+    if previous_metadata is not None:
+        previous_sync = previous_metadata["last_sync"]
+        if isinstance(previous_sync, datetime):
+            newer_sync = max(newer_sync, previous_sync + timedelta(seconds=1))
+    older_sync = newer_sync - timedelta(seconds=1)
+    older_snapshot = ItemSnapshot.model_validate(
+        {
+            "datasetVersion": "older",
+            "gameVersion": "rebirth",
+            "items": [
+                item_payload(
+                    older_game_id,
+                    "Older Item",
+                    quality=1,
+                    item_type="passive",
+                )
+            ],
+        }
+    )
+    newer_snapshot = ItemSnapshot.model_validate(
+        {
+            "datasetVersion": "newer",
+            "gameVersion": "repentance",
+            "items": [
+                item_payload(
+                    newer_game_id,
+                    "Newer Item",
+                    quality=1,
+                    item_type="active",
+                )
+            ],
+        }
+    )
+    newer_lock_acquired = asyncio.Event()
+    older_lock_requested = asyncio.Event()
+    release_newer_lock = asyncio.Event()
+    newer_task: asyncio.Task[datetime] | None = None
+    older_task: asyncio.Task[datetime] | None = None
+
+    try:
+        newer_task = asyncio.create_task(
+            IngestionService(
+                committed_session_factory,
+                repository_factory=lambda session: HoldingLockRepository(
+                    session,
+                    newer_lock_acquired,
+                    release_newer_lock,
+                ),
+                clock=lambda: newer_sync,
+            ).ingest(newer_snapshot)
+        )
+        await asyncio.wait_for(newer_lock_acquired.wait(), timeout=2)
+        older_task = asyncio.create_task(
+            IngestionService(
+                committed_session_factory,
+                repository_factory=lambda session: WaitingLockRepository(
+                    session,
+                    older_lock_requested,
+                ),
+                clock=lambda: older_sync,
+            ).ingest(older_snapshot)
+        )
+        await asyncio.wait_for(older_lock_requested.wait(), timeout=2)
+        release_newer_lock.set()
+        assert newer_task is not None
+        assert older_task is not None
+        newer_result, older_result = await asyncio.gather(newer_task, older_task)
+
+        async with committed_session_factory() as session:
+            newer_item = await capture_item_state(session, newer_game_id)
+            older_item = await capture_item_state(session, older_game_id)
+            metadata = await capture_metadata_state(session)
+
+        assert newer_result == newer_sync
+        assert older_result == newer_sync
+        assert newer_item is not None
+        assert newer_item["name"] == "Newer Item"
+        assert older_item == previous_older_item
+        assert metadata is not None
+        assert metadata["dataset_version"] == "newer"
+        assert metadata["last_sync"] == newer_sync
+    finally:
+        release_newer_lock.set()
+        tasks: list[asyncio.Task[datetime]] = []
+        if newer_task is not None:
+            tasks.append(newer_task)
+        if older_task is not None:
+            tasks.append(older_task)
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=2,
+            )
+        await restore_test_state(
+            committed_session_factory,
+            older_game_id,
+            previous_older_item,
+            previous_metadata,
+        )
+        await restore_test_state(
+            committed_session_factory,
+            newer_game_id,
+            previous_newer_item,
+            previous_metadata,
+        )
 
 
 @pytest.mark.asyncio

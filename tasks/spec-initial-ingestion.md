@@ -56,7 +56,7 @@ Reglas de validacion:
   snapshot upstream; no se genera silenciosamente a partir del reloj local.
 - `gameVersion` es opcional y, cuando existe, no puede estar vacio.
 - `items` es obligatorio, es una lista no vacia y no contiene `gameId`
-  repetidos.
+  repetidos; admite como maximo 10000 registros.
 - `gameId` es un entero positivo representable por la columna PostgreSQL
   `INTEGER` (`1` a `2147483647`).
 - `name`, `description` e `imageUrl` son strings no vacios despues de quitar
@@ -64,6 +64,7 @@ Reglas de validacion:
 - `quality` es obligatorio y puede ser `null` o un entero entre `0` y `4`.
 - `type`, `rechargeTime` e `introducedInVersion` son opcionales; si se
   proporcionan, son strings no vacios.
+- Las strings del snapshot tienen como maximo 4096 caracteres.
 - Se rechazan JSON invalido, campos desconocidos, tipos incompatibles y
   cualquier registro que no cumpla todas las reglas antes de abrir la
   transaccion de persistencia.
@@ -106,9 +107,9 @@ ejecuciones (`scrape_runs`) en esta slice.
 
 ## Failure Behavior
 
-- Error al abrir o decodificar el fichero, una ruta que no sea un fichero regular
-  o un snapshot que supere 5 MiB: el comando termina con codigo distinto de cero
-  y no toca PostgreSQL.
+- Error al abrir o decodificar el fichero, una ruta que contenga symlinks, una ruta
+  que no sea un fichero regular o un snapshot que supere 5 MiB: el comando termina
+  con codigo distinto de cero y no toca PostgreSQL.
 - Error de validacion: el comando termina con codigo distinto de cero,
   muestra rutas de campos invalidos sin secretos y no toca PostgreSQL.
 - Error en cualquier upsert o en la metadata: se revierte la transaccion
@@ -162,10 +163,12 @@ uv run pyright
 El comando exige una ruta de entrada explicita y usa `DATABASE_URL` para la
 conexion. No tiene una opcion que permita apuntar por accidente a una URL
 remota desde la ruta de integracion local; la proteccion existente de
-`TEST_DATABASE_URL` se mantiene. La configuracion de ingesta requiere un nombre
-de base y credenciales explicitos para destinos remotos, rechaza overrides de
-`PGHOST`, `PGPORT`, `PGSERVICE`, `PGUSER` y credenciales ambientales, y solo
-permite opciones asyncpg no relacionadas con el destino.
+`TEST_DATABASE_URL` se mantiene. La configuracion de ingesta requiere un host
+explicito o uno de los sockets locales aprobados (`/run/postgresql` y
+`/var/run/postgresql`), un nombre de base y credenciales explicitos para
+destinos remotos, rechaza overrides `PG*`, trust stores y key logging
+ambientales, y solo permite `prepared_statement_cache_size` entre las opciones
+asyncpg, con un valor entre 0 y 1000.
 
 ## Project Structure
 

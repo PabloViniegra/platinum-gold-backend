@@ -53,8 +53,13 @@ def database_connect_args(settings: DatabaseSettings) -> dict[str, object]:
         "command_timeout": settings.dependency_timeout_seconds,
     }
     if settings.database_requires_tls:
-        tls_context = ssl.create_default_context()
-        tls_context.keylog_filename = None  # type: ignore[reportAttributeAccessIssue]
+        tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        tls_context.verify_mode = ssl.CERT_REQUIRED
+        tls_context.check_hostname = True
+        tls_context.verify_flags |= (
+            ssl.VERIFY_X509_PARTIAL_CHAIN | ssl.VERIFY_X509_STRICT
+        )
+        tls_context.load_default_certs(ssl.Purpose.SERVER_AUTH)
         connect_args["ssl"] = tls_context
     return connect_args
 

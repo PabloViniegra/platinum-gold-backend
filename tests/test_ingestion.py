@@ -7,7 +7,11 @@ from pydantic import ValidationError
 
 from app.ingestion import loader as loader_module
 from app.ingestion.loader import SnapshotLoadError, load_snapshot
-from app.ingestion.schemas import ItemSnapshot
+from app.ingestion.schemas import (
+    MAX_SNAPSHOT_ITEMS,
+    MAX_SNAPSHOT_STRING_LENGTH,
+    ItemSnapshot,
+)
 
 SnapshotPayload = dict[str, Any]
 
@@ -131,6 +135,30 @@ def test_snapshot_fails_fast_on_unknown_top_level_fields() -> None:
     assert len(error.value.errors()) == 1
 
 
+def test_snapshot_rejects_excessive_item_count() -> None:
+    payload = valid_payload()
+    items = payload["items"]
+    assert isinstance(items, list)
+    assert isinstance(items[0], dict)
+    payload["items"] = [
+        {**items[0], "gameId": game_id} for game_id in range(1, MAX_SNAPSHOT_ITEMS + 2)
+    ]
+
+    with pytest.raises(ValidationError):
+        ItemSnapshot.model_validate(payload)
+
+
+def test_snapshot_rejects_excessive_string_length() -> None:
+    payload = valid_payload()
+    items = payload["items"]
+    assert isinstance(items, list)
+    assert isinstance(items[0], dict)
+    items[0]["description"] = " " * MAX_SNAPSHOT_STRING_LENGTH + "x"
+
+    with pytest.raises(ValidationError):
+        ItemSnapshot.model_validate(payload)
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -175,6 +203,32 @@ def test_load_snapshot_rejects_symlink(tmp_path: Path) -> None:
 
     with pytest.raises(SnapshotLoadError):
         load_snapshot(link)
+
+
+def test_load_snapshot_rejects_symlinked_parent(tmp_path: Path) -> None:
+    target_directory = tmp_path / "target"
+    target_directory.mkdir()
+    (target_directory / "items.json").write_text(
+        json.dumps(valid_payload()),
+        encoding="utf-8",
+    )
+    linked_directory = tmp_path / "linked"
+    linked_directory.symlink_to(target_directory, target_is_directory=True)
+
+    with pytest.raises(SnapshotLoadError):
+        load_snapshot(linked_directory / "items.json")
+
+
+def test_load_snapshot_fails_closed_without_secure_opening(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "items.json"
+    path.write_text(json.dumps(valid_payload()), encoding="utf-8")
+    monkeypatch.setattr(loader_module.os, "supports_dir_fd", set[object]())
+
+    with pytest.raises(SnapshotLoadError, match="Secure snapshot opening"):
+        load_snapshot(path)
 
 
 def test_snapshot_requires_quality_field() -> None:

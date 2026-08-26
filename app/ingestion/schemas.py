@@ -4,6 +4,7 @@ from urllib.parse import urlsplit
 from pydantic import (
     AfterValidator,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     FailFast,
     Field,
@@ -21,12 +22,25 @@ def reject_nul(value: str) -> str:
     return value
 
 
+def reject_oversized_string(value: object) -> object:
+    if isinstance(value, str) and len(value) > MAX_SNAPSHOT_STRING_LENGTH:
+        raise ValueError("strings exceed the maximum length")
+    return value
+
+
+MAX_GAME_ID = 2_147_483_647
+MAX_SNAPSHOT_ITEMS = 10_000
+MAX_SNAPSHOT_STRING_LENGTH = 4_096
 NonEmptyString = Annotated[
     str,
-    StringConstraints(min_length=1, strip_whitespace=True),
+    StringConstraints(
+        min_length=1,
+        max_length=MAX_SNAPSHOT_STRING_LENGTH,
+        strip_whitespace=True,
+    ),
+    BeforeValidator(reject_oversized_string),
     AfterValidator(reject_nul),
 ]
-MAX_GAME_ID = 2_147_483_647
 ITEM_IMPORT_FIELDS = frozenset(
     {
         "gameId",
@@ -128,7 +142,10 @@ class ItemSnapshot(BaseModel):
 
     dataset_version: NonEmptyString = Field(alias="datasetVersion")
     game_version: NonEmptyString | None = Field(default=None, alias="gameVersion")
-    items: Annotated[list[ItemImport], FailFast()] = Field(min_length=1)
+    items: Annotated[list[ItemImport], FailFast()] = Field(
+        min_length=1,
+        max_length=MAX_SNAPSHOT_ITEMS,
+    )
 
     @model_validator(mode="before")
     @classmethod
