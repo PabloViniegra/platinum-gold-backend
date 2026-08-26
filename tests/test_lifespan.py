@@ -63,6 +63,7 @@ async def test_lifespan_creates_and_closes_runtime_resources(
             "database_url": "postgresql+asyncpg://localhost/isaac_api",
             "redis_url": "redis://localhost:6379/0",
             "clerk_secret_key": None,
+            "app_version": "9.8.7",
         }
     )
     database_factory = build_database_factory(engine, session_factory)
@@ -75,6 +76,7 @@ async def test_lifespan_creates_and_closes_runtime_resources(
         assert app.state.database_engine is engine
         assert app.state.session_factory is session_factory
         assert app.state.redis is redis
+        assert app.version == "9.8.7"
 
     assert engine.disposed is True
     assert redis.closed is True

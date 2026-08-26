@@ -12,6 +12,7 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logging import RequestLoggingMiddleware, configure_logging
 from app.core.redis import create_redis
 from app.health.router import router as health_router
+from app.items.router import meta_router
 from app.items.router import router as items_router
 
 
@@ -20,6 +21,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         settings_factory = cast(Callable[[], Settings], Settings)
         runtime_settings = settings or settings_factory()
+        app.version = runtime_settings.app_version
         configure_logging(runtime_settings.log_level)
         async with AsyncExitStack() as stack:
             database_engine, session_factory = create_database(runtime_settings)
@@ -52,6 +54,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
     app.include_router(health_router)
     app.include_router(items_router)
+    app.include_router(meta_router)
 
     def openapi() -> dict[str, object]:
         if app.openapi_schema is not None:

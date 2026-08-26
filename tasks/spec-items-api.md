@@ -187,7 +187,8 @@ Ninguno coincide → `404` `ITEM_NOT_FOUND` con mensaje
 ```
 
 `apiVersion` sale de `Settings.app_version`. `items` es el recuento en
-PostgreSQL. `gameVersion` y `lastSync` quedan `null` hasta ingestion.
+PostgreSQL. `lastSync` es un timestamp ISO-8601 nullable y queda `null` hasta
+ingestion; `gameVersion` queda `null` hasta que exista esa metadata.
 
 ### Errores
 

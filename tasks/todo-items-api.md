@@ -70,21 +70,21 @@ SQLAlchemy, y pasar los quality gates. `/random` se declara antes de `/{id}`.
 
 **Acceptance criteria:**
 
-- [ ] Random con fake → `200`. Fake vacio → `404` `ITEM_NOT_FOUND`.
-- [ ] Meta devuelve `apiVersion`, `items` del fake, `gameVersion`/`lastSync`
+- [x] Random con fake → `200`. Fake vacio → `404` `ITEM_NOT_FOUND`.
+- [x] Meta devuelve `apiVersion`, `items` del fake, `gameVersion`/`lastSync`
       `null`.
-- [ ] `get_session` usa `app.state.session_factory`.
-- [ ] Existe implementacion SQLAlchemy de los cuatro metodos del repository.
-- [ ] OpenAPI documenta las cuatro rutas y `X-API-Key`.
-- [ ] `/health` sigue publico.
+- [x] `get_session` usa `app.state.session_factory`.
+- [x] Existe implementacion SQLAlchemy de los cuatro metodos del repository.
+- [x] OpenAPI documenta las cuatro rutas y `X-API-Key`.
+- [x] `/health` sigue publico.
 
 **Verification:**
 
-- [ ] RED y GREEN: `uv run pytest tests/test_items_api.py tests/test_health.py`
-- [ ] `uv run pytest`
-- [ ] `uv run ruff check .`
-- [ ] `uv run ruff format --check .`
-- [ ] `uv run pyright`
+- [x] RED y GREEN: `uv run pytest tests/test_items_api.py tests/test_health.py`
+- [x] `uv run pytest`
+- [x] `uv run ruff check .`
+- [x] `uv run ruff format --check .`
+- [x] `uv run pyright`
 
 **Dependencies:** Task 2
 

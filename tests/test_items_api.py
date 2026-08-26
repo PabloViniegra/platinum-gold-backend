@@ -4,7 +4,8 @@ from httpx import ASGITransport, AsyncClient
 from app.auth.dependencies import get_api_key_verifier
 from app.auth.principal import ApiPrincipal
 from app.core.config import Settings
-from app.items.repository import ItemRecord, get_item_repository
+from app.items.dependencies import get_item_repository
+from app.items.repository import ItemRecord
 from app.main import create_app
 
 
@@ -82,6 +83,17 @@ class FakeItemRepository:
             items = [item for item in items if item.introduced_in_version == version]
         return items
 
+    async def get_random(
+        self,
+        *,
+        search: str | None,
+        quality: int | None,
+        item_type: str | None,
+        version: str | None,
+    ) -> ItemRecord | None:
+        items = self._filtered(search, quality, item_type, version)
+        return items[0] if items else None
+
 
 BRIMSTONE = ItemRecord(
     game_id=118,
@@ -120,14 +132,18 @@ def build_items_app(
 
 
 @pytest.mark.asyncio
-async def test_get_item_without_api_key_returns_401() -> None:
+@pytest.mark.parametrize(
+    "path",
+    ["/v1/items", "/v1/items/random", "/v1/items/118", "/v1/meta"],
+)
+async def test_item_routes_without_api_key_return_401(path: str) -> None:
     app = build_items_app(FakeItemRepository([BRIMSTONE]))
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
     ) as client:
-        response = await client.get("/v1/items/118")
+        response = await client.get(path)
 
     assert response.status_code == 401
     assert response.json() == {
@@ -136,7 +152,11 @@ async def test_get_item_without_api_key_returns_401() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_item_without_required_scope_returns_403() -> None:
+@pytest.mark.parametrize(
+    "path",
+    ["/v1/items", "/v1/items/random", "/v1/items/118", "/v1/meta"],
+)
+async def test_item_routes_without_required_scope_return_403(path: str) -> None:
     app = build_items_app(
         FakeItemRepository([BRIMSTONE]),
         scopes=frozenset({"items:read"}),
@@ -146,10 +166,7 @@ async def test_get_item_without_required_scope_returns_403() -> None:
         transport=ASGITransport(app=app),
         base_url="http://test",
     ) as client:
-        response = await client.get(
-            "/v1/items/118",
-            headers={"X-API-Key": "ak_valid"},
-        )
+        response = await client.get(path, headers={"X-API-Key": "ak_valid"})
 
     assert response.status_code == 403
     assert response.json() == {
@@ -212,22 +229,6 @@ SAD_ONION = ItemRecord(
     image_url="https://example.com/1.png",
     introduced_in_version="rebirth",
 )
-
-
-@pytest.mark.asyncio
-async def test_list_items_requires_api_access() -> None:
-    app = build_items_app(FakeItemRepository(), scopes=frozenset())
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    ) as client:
-        response = await client.get(
-            "/v1/items",
-            headers={"X-API-Key": "ak_valid"},
-        )
-
-    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -318,3 +319,90 @@ async def test_list_items_rejects_invalid_query() -> None:
     assert bad_quality.json()["error"]["code"] == "VALIDATION_ERROR"
     assert bad_limit.status_code == 422
     assert bad_limit.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+@pytest.mark.asyncio
+async def test_random_item_returns_item() -> None:
+    app = build_items_app(FakeItemRepository([BRIMSTONE]))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/v1/items/random",
+            headers={"X-API-Key": "ak_valid"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == BRIMSTONE_JSON
+
+
+@pytest.mark.asyncio
+async def test_random_item_without_match_returns_404() -> None:
+    app = build_items_app(FakeItemRepository())
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/v1/items/random",
+            headers={"X-API-Key": "ak_valid"},
+        )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {
+            "code": "ITEM_NOT_FOUND",
+            "message": "No item matches the given filters",
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_meta_returns_api_version_and_item_count() -> None:
+    app = build_items_app(FakeItemRepository([BRIMSTONE, SAD_ONION]))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/v1/meta",
+            headers={"X-API-Key": "ak_valid"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "apiVersion": "0.1.0",
+        "gameVersion": None,
+        "lastSync": None,
+        "items": 2,
+    }
+
+
+@pytest.mark.asyncio
+async def test_health_remains_public() -> None:
+    app = build_items_app(FakeItemRepository())
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_openapi_documents_item_routes() -> None:
+    paths = create_app(build_settings()).openapi()["paths"]
+
+    for path in (
+        "/v1/items",
+        "/v1/items/{item_id}",
+        "/v1/items/random",
+        "/v1/meta",
+    ):
+        assert paths[path]["get"]["security"] == [{"X-API-Key": []}]

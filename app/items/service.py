@@ -1,6 +1,12 @@
 from app.core.exceptions import AppError
 from app.items.repository import ItemRecord, ItemRepository
-from app.items.schemas import ItemListParams, ItemListResponse, ItemResponse
+from app.items.schemas import (
+    ItemFilterParams,
+    ItemListParams,
+    ItemListResponse,
+    ItemResponse,
+    MetaResponse,
+)
 
 
 class ItemService:
@@ -35,6 +41,35 @@ class ItemService:
             total=total,
             limit=params.limit,
             offset=params.offset,
+        )
+
+    async def get_random(self, params: ItemFilterParams) -> ItemResponse:
+        item = await self._repository.get_random(
+            search=params.search,
+            quality=params.quality,
+            item_type=params.type,
+            version=params.version,
+        )
+        if item is None:
+            raise AppError(
+                404,
+                "ITEM_NOT_FOUND",
+                "No item matches the given filters",
+            )
+        return to_item_response(item)
+
+    async def get_meta(self, api_version: str) -> MetaResponse:
+        total = await self._repository.count_items(
+            search=None,
+            quality=None,
+            item_type=None,
+            version=None,
+        )
+        return MetaResponse(
+            api_version=api_version,
+            game_version=None,
+            last_sync=None,
+            items=total,
         )
 
 
