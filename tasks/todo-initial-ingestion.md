@@ -77,18 +77,18 @@ commit propio.
 
 **Acceptance criteria:**
 
-- [ ] Un item nuevo se inserta y un item existente se actualiza por `game_id`
+- [x] Un item nuevo se inserta y un item existente se actualiza por `game_id`
   sin cambiar su PK interna ni `created_at`.
-- [ ] Los campos del snapshot y `updated_at` se actualizan en un conflicto;
+- [x] Los campos del snapshot y `updated_at` se actualizan en un conflicto;
   los registros ausentes no se eliminan.
-- [ ] La metadata se crea o actualiza con `dataset_version`, `game_version` y
+- [x] La metadata se crea o actualiza con `dataset_version`, `game_version` y
   `last_sync` UTC dentro de la sesion recibida.
 
 **Verification:**
 
-- [ ] RED y GREEN: `TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/isaac_api_test uv run pytest -o addopts='' tests/integration/test_ingestion_postgres.py`
-- [ ] `uv run ruff check app/ingestion tests/integration/test_ingestion_postgres.py`
-- [ ] `uv run pyright app/ingestion tests/integration/test_ingestion_postgres.py`
+- [x] RED y GREEN: `TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/isaac_api_test uv run pytest -o addopts='' tests/integration/test_ingestion_postgres.py`
+- [x] `uv run ruff check app/ingestion tests/integration/test_ingestion_postgres.py`
+- [x] `uv run pyright app/ingestion tests/integration/test_ingestion_postgres.py`
 
 **Dependencies:** Task 1, Task 2
 
