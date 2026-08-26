@@ -62,6 +62,7 @@ app/items/
 app/core/database.py   # + get_session
 app/main.py            # include_router
 tests/test_items_api.py
+tests/integration/test_items_repository_postgres.py  # opt-in PostgreSQL
 tasks/spec-items-api.md
 ```
 
@@ -205,7 +206,9 @@ No se anade `INVALID_FILTER`. Pydantic cubre los valores ilegales.
 ## Testing Strategy
 
 `tests/test_items_api.py`. HTTPX `ASGITransport`. Clerk y el repository se
-sustituyen. La suite no arranca Compose ni Neon.
+sustituyen. La suite base no arranca Compose ni Neon. La suite opt-in en
+`tests/integration/` usa una base PostgreSQL local dedicada terminada en
+`_test` y revierte cada transaccion.
 
 Casos:
 
@@ -230,7 +233,8 @@ RED, GREEN, REFACTOR por comportamiento.
 - Proteger las cuatro rutas con `api:access`.
 - Usar `AppError` para `ITEM_NOT_FOUND`.
 - Mantener modelos SQLAlchemy y schemas Pydantic separados.
-- Tests de esta fase sin Docker, Neon ni Clerk real.
+- Suite base sin Docker, Neon ni Clerk real; integracion PostgreSQL solo con
+  `TEST_DATABASE_URL` explicita y una base local dedicada terminada en `_test`.
 - Timeouts ya existentes en la sesion / engine.
 
 ### Ask first
@@ -257,7 +261,8 @@ RED, GREEN, REFACTOR por comportamiento.
 - Listado pagina y filtra sin tablas extra.
 - Meta cuenta items y deja sync en `null`.
 - `uv run pytest`, Ruff y Pyright verdes.
-- Ningun test de esta fase requiere PostgreSQL en marcha.
+- La suite base no requiere PostgreSQL en marcha; la integracion opt-in valida
+  el repository contra PostgreSQL real.
 
 ## Assumptions
 
@@ -267,8 +272,8 @@ RED, GREEN, REFACTOR por comportamiento.
 4. Search es `ILIKE` en `name`, no trigram.
 5. Sin pool/tag/transformation hasta que existan esas tablas.
 6. `lastSync` y `gameVersion` son `null` hasta ingestion.
-7. Tests con repository fake. `get_session` existe, pero la suite HTTP no
-   abre engine.
+7. Tests HTTP con repository fake. La suite de integracion abre engine solo con
+   `TEST_DATABASE_URL` explicita.
 
 ## Open Questions
 

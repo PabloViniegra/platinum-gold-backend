@@ -4,8 +4,8 @@ FastAPI backend for structured data from The Binding of Isaac. PostgreSQL is
 the source of truth and Redis provides disposable runtime infrastructure.
 
 This repository currently contains the executable foundation described in
-`tasks/spec.md`, plus Clerk API-key authentication described in
-`tasks/spec-auth.md`. Item resources, caching, rate limiting, and ingestion
+`tasks/spec.md`, Clerk API-key authentication described in `tasks/spec-auth.md`,
+and the authenticated read API for items. Caching, rate limiting, and ingestion
 are not implemented yet.
 
 ## Requirements
@@ -57,6 +57,20 @@ uv run alembic upgrade head
 uv run alembic downgrade -1
 ```
 
+Pull requests and pushes to `main` run the quality gates and the PostgreSQL
+integration job from `.github/workflows/ci.yml`.
+
+Run PostgreSQL integration tests against an explicit database with:
+
+```bash
+docker compose exec -T postgres psql -U postgres -d postgres -c 'CREATE DATABASE isaac_api_test;'
+TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/isaac_api make integration
+```
+
+The integration target only accepts local PostgreSQL databases whose name ends
+in `_test`, and applies migrations before running. Integration tests are opt-in
+so the regular test suite does not require Docker or a live database.
+
 Production schema changes must use Alembic. The application never creates
 tables automatically at startup.
 
@@ -85,6 +99,6 @@ app/
 |-- health/     # Liveness and readiness feature
 `-- main.py     # FastAPI application factory and lifespan
 alembic/        # Database migrations
-tests/          # Unit and API tests
+tests/          # Unit, API, and opt-in integration tests
 tasks/          # Approved specification and implementation plan
 ```
