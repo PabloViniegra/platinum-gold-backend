@@ -45,17 +45,17 @@ arranque automatico de tablas.
 
 **Acceptance criteria:**
 
-- [ ] La tabla tiene una unica fila identificada por una clave singleton,
+- [x] La tabla tiene una unica fila identificada por una clave singleton,
   `dataset_version` y `last_sync` obligatorios, y `game_version` nullable.
-- [ ] `upgrade` y `downgrade` crean y eliminan la tabla con sus restricciones
+- [x] `upgrade` y `downgrade` crean y eliminan la tabla con sus restricciones
   sin usar `Base.metadata.create_all()`.
-- [ ] Alembic conoce el modelo y la migracion no requiere secretos versionados.
+- [x] Alembic conoce el modelo y la migracion no requiere secretos versionados.
 
 **Verification:**
 
-- [ ] RED y GREEN: `uv run pytest tests/test_dataset_metadata.py`
-- [ ] `TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/isaac_api_test make integration`
-- [ ] `uv run pyright app/meta alembic tests/test_dataset_metadata.py`
+- [x] RED y GREEN: `uv run pytest tests/test_dataset_metadata.py`
+- [x] `TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/isaac_api_test make integration`
+- [x] `uv run pyright app/meta alembic tests/test_dataset_metadata.py`
 
 **Dependencies:** None
 

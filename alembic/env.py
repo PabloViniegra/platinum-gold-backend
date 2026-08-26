@@ -11,6 +11,7 @@ from alembic import context
 from app.core.config import Settings
 from app.core.database import database_connect_args
 from app.items.models import Item
+from app.meta.models import DatasetMetadata
 
 config = context.config
 
@@ -20,7 +21,8 @@ if config.config_file_name is not None:
 settings_factory = cast(Callable[[], Settings], Settings)
 settings = settings_factory()
 database_url = settings.database_url.get_secret_value()
-target_metadata = Item.metadata
+registered_models = (Item, DatasetMetadata)
+target_metadata = registered_models[0].metadata
 
 
 def run_migrations_offline() -> None:
