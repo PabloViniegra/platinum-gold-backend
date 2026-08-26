@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from app.auth.dependencies import require_scopes
 from app.items.repository import ItemRepository, get_item_repository
-from app.items.schemas import ItemResponse
+from app.items.schemas import ItemListParams, ItemListResponse, ItemResponse
 from app.items.service import ItemService
 
 router = APIRouter(
@@ -18,6 +18,14 @@ async def get_item_service(
     repository: Annotated[ItemRepository, Depends(get_item_repository)],
 ) -> ItemService:
     return ItemService(repository)
+
+
+@router.get("", response_model=ItemListResponse)
+async def list_items(
+    params: Annotated[ItemListParams, Depends()],
+    service: Annotated[ItemService, Depends(get_item_service)],
+) -> ItemListResponse:
+    return await service.list_items(params)
 
 
 @router.get("/{item_id}", response_model=ItemResponse)

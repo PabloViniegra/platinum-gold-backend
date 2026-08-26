@@ -40,16 +40,16 @@ limit y offset. Validacion de query via Pydantic. Sigue usando el fake.
 
 **Acceptance criteria:**
 
-- [ ] Listado vacio → `200` `{items:[], total:0, limit:20, offset:0}`.
-- [ ] `quality` y `search` reducen el resultado del fake.
-- [ ] `limit` y `offset` se reflejan en la respuesta.
-- [ ] `quality=9` o `limit=0` → `422` `VALIDATION_ERROR`.
-- [ ] La ruta exige `api:access`.
+- [x] Listado vacio → `200` `{items:[], total:0, limit:20, offset:0}`.
+- [x] `quality` y `search` reducen el resultado del fake.
+- [x] `limit` y `offset` se reflejan en la respuesta.
+- [x] `quality=9` o `limit=0` → `422` `VALIDATION_ERROR`.
+- [x] La ruta exige `api:access`.
 
 **Verification:**
 
-- [ ] RED y GREEN: `uv run pytest tests/test_items_api.py`
-- [ ] `uv run pyright app/items tests/test_items_api.py`
+- [x] RED y GREEN: `uv run pytest tests/test_items_api.py`
+- [x] `uv run pyright app/items tests/test_items_api.py`
 
 **Dependencies:** Task 1
 
