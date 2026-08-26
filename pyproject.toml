@@ -25,13 +25,14 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "-q"
+addopts = "-q -m 'not integration'"
 asyncio_mode = "auto"
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = ["integration: tests requiring a PostgreSQL instance"]
 
 [tool.pyright]
-include = ["app", "alembic", "tests"]
+include = ["app", "alembic", "scripts", "tests"]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
 
