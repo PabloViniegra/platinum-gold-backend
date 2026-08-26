@@ -68,19 +68,19 @@ Compose y pasar la suite completa, Ruff y Pyright.
 
 **Acceptance criteria:**
 
-- [ ] `alembic upgrade head` crea `items` en local.
-- [ ] `alembic downgrade -1` la elimina.
-- [ ] Un segundo `upgrade head` vuelve a dejarla.
-- [ ] No se usa `create_all()` en runtime.
-- [ ] No hay router ni contrato HTTP nuevo.
+- [x] `alembic upgrade head` crea `items` en local.
+- [x] `alembic downgrade -1` la elimina.
+- [x] Un segundo `upgrade head` vuelve a dejarla.
+- [x] No se usa `create_all()` en runtime.
+- [x] No hay router ni contrato HTTP nuevo.
 
 **Verification:**
 
-- [ ] `uv run alembic upgrade head && uv run alembic downgrade -1 && uv run alembic upgrade head`
-- [ ] `uv run pytest`
-- [ ] `uv run ruff check .`
-- [ ] `uv run ruff format --check .`
-- [ ] `uv run pyright`
+- [x] `uv run alembic upgrade head && uv run alembic downgrade -1 && uv run alembic upgrade head`
+- [x] `uv run pytest`
+- [x] `uv run ruff check .`
+- [x] `uv run ruff format --check .`
+- [x] `uv run pyright`
 
 **Dependencies:** Task 2
 

@@ -88,9 +88,7 @@ from app.core.database import Base
 
 class Item(Base):
     __tablename__ = "items"
-    __table_args__ = (
-        CheckConstraint("quality BETWEEN 0 AND 4", name="quality_range"),
-    )
+    __table_args__ = (CheckConstraint("quality BETWEEN 0 AND 4", name="quality_range"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     game_id: Mapped[int] = mapped_column(Integer, unique=True)
