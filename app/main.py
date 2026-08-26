@@ -3,7 +3,9 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from typing import cast
 
 from fastapi import FastAPI
+from fastapi.openapi.utils import get_openapi
 
+from app.auth.clerk import bind_api_key_verifier
 from app.core.config import Settings
 from app.core.database import create_database
 from app.core.exceptions import register_exception_handlers
@@ -23,10 +25,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             stack.push_async_callback(database_engine.dispose)
             redis = create_redis(runtime_settings)
             stack.push_async_callback(redis.aclose)
+            secret = (
+                runtime_settings.clerk_secret_key.get_secret_value()
+                if runtime_settings.clerk_secret_key is not None
+                else None
+            )
+            timeout_ms = int(runtime_settings.dependency_timeout_seconds * 1000)
             app.state.settings = runtime_settings
             app.state.database_engine = database_engine
             app.state.session_factory = session_factory
             app.state.redis = redis
+            app.state.api_key_verifier = await bind_api_key_verifier(
+                stack,
+                secret,
+                timeout_ms,
+            )
             yield
 
     app = FastAPI(
@@ -37,6 +50,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(RequestLoggingMiddleware)
     register_exception_handlers(app)
     app.include_router(health_router)
+
+    def openapi() -> dict[str, object]:
+        if app.openapi_schema is not None:
+            return app.openapi_schema
+        schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            routes=app.routes,
+        )
+        components = schema.setdefault("components", {})
+        schemes = components.setdefault("securitySchemes", {})
+        schemes["X-API-Key"] = {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-API-Key",
+        }
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = openapi  # type: ignore[method-assign]
     return app
 
 

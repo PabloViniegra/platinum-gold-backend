@@ -13,6 +13,7 @@ async def test_liveness_does_not_require_infrastructure() -> None:
             {
                 "database_url": "postgresql+asyncpg://localhost/isaac_api",
                 "redis_url": "redis://localhost:6379/0",
+                "clerk_secret_key": None,
             }
         )
     )
@@ -33,6 +34,7 @@ def test_liveness_is_documented_as_health() -> None:
             {
                 "database_url": "postgresql+asyncpg://localhost/isaac_api",
                 "redis_url": "redis://localhost:6379/0",
+                "clerk_secret_key": None,
             }
         )
     )
@@ -59,6 +61,7 @@ async def test_readiness_reports_available_dependencies() -> None:
             {
                 "database_url": "postgresql+asyncpg://localhost/isaac_api",
                 "redis_url": "redis://localhost:6379/0",
+                "clerk_secret_key": None,
             }
         )
     )
@@ -86,6 +89,7 @@ async def test_readiness_hides_dependency_failure_details() -> None:
             {
                 "database_url": "postgresql+asyncpg://localhost/isaac_api",
                 "redis_url": "redis://localhost:6379/0",
+                "clerk_secret_key": None,
             }
         )
     )

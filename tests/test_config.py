@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -16,7 +18,13 @@ def test_settings_accept_valid_runtime_configuration() -> None:
     assert settings.log_level == "INFO"
 
 
-def test_settings_require_database_and_redis_urls() -> None:
+def test_settings_require_database_and_redis_urls(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("REDIS_URL", raising=False)
     with pytest.raises(ValidationError):
         Settings.model_validate({})
 

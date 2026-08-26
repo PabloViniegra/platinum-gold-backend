@@ -25,6 +25,7 @@ def build_settings() -> Settings:
         {
             "database_url": "postgresql+asyncpg://localhost/isaac_api",
             "redis_url": "redis://localhost:6379/0",
+            "clerk_secret_key": None,
         }
     )
 

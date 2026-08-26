@@ -14,13 +14,23 @@ class ErrorResponse(BaseModel):
     error: ErrorDetail
 
 
+class AppError(HTTPException):
+    def __init__(self, status_code: int, code: str, message: str) -> None:
+        self.code = code
+        self.message = message
+        super().__init__(status_code=status_code, detail=message)
+
+
 async def http_exception_handler(
     _request: Request,
     exception: Exception,
 ) -> JSONResponse:
     if not isinstance(exception, HTTPException):
         raise exception
-    if exception.status_code == 404:
+    if isinstance(exception, AppError):
+        code = exception.code
+        message = exception.message
+    elif exception.status_code == 404:
         code = "NOT_FOUND"
         message = "Resource not found"
     else:
