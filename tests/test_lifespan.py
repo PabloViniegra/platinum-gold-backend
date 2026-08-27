@@ -6,6 +6,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
+from app.items.cache import RedisItemCache
 from app.main import create_app
 
 
@@ -76,6 +77,7 @@ async def test_lifespan_creates_and_closes_runtime_resources(
         assert app.state.database_engine is engine
         assert app.state.session_factory is session_factory
         assert app.state.redis is redis
+        assert isinstance(app.state.item_cache, RedisItemCache)
         assert app.version == "9.8.7"
 
     assert engine.disposed is True

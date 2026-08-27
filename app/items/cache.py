@@ -65,6 +65,32 @@ class RedisCacheClient(Protocol):
     def incr(self, name: str) -> Awaitable[int]: ...
 
 
+class ItemCache(Protocol):
+    async def get_item(self, game_id: int) -> CacheLookup[ItemResponse]: ...
+
+    async def set_item(self, item: ItemResponse, generation: str | None) -> None: ...
+
+    async def get_list(
+        self,
+        params: ItemListParams,
+    ) -> CacheLookup[ItemListResponse]: ...
+
+    async def set_list(
+        self,
+        params: ItemListParams,
+        response: ItemListResponse,
+        generation: str | None,
+    ) -> None: ...
+
+    async def get_meta(self, api_version: str) -> CacheLookup[MetaResponse]: ...
+
+    async def set_meta(
+        self,
+        response: MetaResponse,
+        generation: str | None,
+    ) -> None: ...
+
+
 class RedisItemCache:
     def __init__(
         self,

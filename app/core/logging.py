@@ -32,6 +32,8 @@ class JsonFormatter(logging.Formatter):
             "status",
             "duration_ms",
             "dependency",
+            "cache_resource",
+            "cache_operation",
             "exception_type",
             "exception_file",
             "exception_function",

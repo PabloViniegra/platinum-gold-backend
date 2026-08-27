@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, Request
 
 from app.auth.dependencies import require_scopes
 from app.core.exceptions import ErrorResponse
-from app.items.dependencies import get_item_repository
+from app.items.cache import ItemCache
+from app.items.dependencies import get_item_cache, get_item_repository
 from app.items.repository import ItemRepository
 from app.items.schemas import (
     ItemFilterParams,
@@ -41,8 +42,9 @@ ITEM_RESPONSES = {
 
 async def get_item_service(
     repository: Annotated[ItemRepository, Depends(get_item_repository)],
+    cache: Annotated[ItemCache, Depends(get_item_cache)],
 ) -> ItemService:
-    return ItemService(repository)
+    return ItemService(repository, cache)
 
 
 @router.get("", response_model=ItemListResponse, responses=LIST_RESPONSES)

@@ -68,17 +68,17 @@ hit/miss/fallback de item, listado y metadata sin cachear `/random`.
 
 **Acceptance criteria:**
 
-- [ ] Un hit devuelve la respuesta sin invocar el repository y un miss consulta
+- [x] Un hit devuelve la respuesta sin invocar el repository y un miss consulta
   PostgreSQL y repuebla Redis.
-- [ ] Fallos Redis operativos o payloads invalidos caen a PostgreSQL y producen
+- [x] Fallos Redis operativos o payloads invalidos caen a PostgreSQL y producen
   warnings sanitizados; errores de programacion no se ocultan.
-- [ ] `/random`, auth, errores y cuerpos HTTP conservan el comportamiento actual.
+- [x] `/random`, auth, errores y cuerpos HTTP conservan el comportamiento actual.
 
 **Verification:**
 
-- [ ] RED y GREEN: `uv run pytest tests/test_cache.py tests/test_items_api.py`
-- [ ] `uv run ruff check app/items tests/test_cache.py tests/test_items_api.py`
-- [ ] `uv run pyright app/items tests/test_cache.py tests/test_items_api.py`
+- [x] RED y GREEN: `uv run pytest tests/test_cache.py tests/test_items_api.py`
+- [x] `uv run ruff check app/items tests/test_cache.py tests/test_items_api.py`
+- [x] `uv run pyright app/items tests/test_cache.py tests/test_items_api.py`
 
 **Dependencies:** Task 2
 
@@ -94,9 +94,9 @@ hit/miss/fallback de item, listado y metadata sin cachear `/random`.
 
 ## Checkpoint: Cache read path
 
-- [ ] Tasks 1-3 cumplen sus tests enfocados.
-- [ ] Una lectura repetida evita PostgreSQL.
-- [ ] Redis indisponible no rompe una lectura resoluble desde PostgreSQL.
+- [x] Tasks 1-3 cumplen sus tests enfocados.
+- [x] Una lectura repetida evita PostgreSQL.
+- [x] Redis indisponible no rompe una lectura resoluble desde PostgreSQL.
 
 ## Task 4: Invalidar despues de la ingesta
 

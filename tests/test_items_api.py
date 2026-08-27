@@ -2,12 +2,21 @@ from datetime import UTC, datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import DataError
 
 from app.auth.dependencies import get_api_key_verifier
 from app.auth.principal import ApiPrincipal
 from app.core.config import Settings
-from app.items.dependencies import get_item_repository
+from app.items.cache import CacheLookup
+from app.items.dependencies import get_item_cache, get_item_repository
 from app.items.repository import CatalogMetaRecord, DatasetMetadataRecord, ItemRecord
+from app.items.schemas import (
+    ItemListParams,
+    ItemListResponse,
+    ItemResponse,
+    MetaResponse,
+)
 from app.main import create_app
 
 
@@ -37,11 +46,18 @@ class FakeItemRepository:
     ) -> None:
         self.items = items or []
         self.metadata = metadata
+        self.get_calls = 0
+        self.list_calls = 0
+        self.count_calls = 0
+        self.random_calls = 0
+        self.meta_calls = 0
 
     async def get_catalog_meta(self) -> CatalogMetaRecord:
+        self.meta_calls += 1
         return CatalogMetaRecord(items=len(self.items), metadata=self.metadata)
 
     async def get_by_game_id(self, game_id: int) -> ItemRecord | None:
+        self.get_calls += 1
         return next((item for item in self.items if item.game_id == game_id), None)
 
     async def list_items(
@@ -56,6 +72,7 @@ class FakeItemRepository:
         limit: int,
         offset: int,
     ) -> list[ItemRecord]:
+        self.list_calls += 1
         items = self._filtered(search, quality, item_type, version)
         reverse = order == "desc"
         items.sort(
@@ -72,6 +89,7 @@ class FakeItemRepository:
         item_type: str | None,
         version: str | None,
     ) -> int:
+        self.count_calls += 1
         return len(self._filtered(search, quality, item_type, version))
 
     def _filtered(
@@ -101,8 +119,72 @@ class FakeItemRepository:
         item_type: str | None,
         version: str | None,
     ) -> ItemRecord | None:
+        self.random_calls += 1
         items = self._filtered(search, quality, item_type, version)
         return items[0] if items else None
+
+
+class FakeItemCache:
+    def __init__(
+        self,
+        *,
+        item: ItemResponse | None = None,
+        item_list: ItemListResponse | None = None,
+        meta: MetaResponse | None = None,
+        failure: Exception | None = None,
+        write_failure: Exception | None = None,
+    ) -> None:
+        self.item = item
+        self.item_list = item_list
+        self.meta = meta
+        self.failure = failure
+        self.write_failure = write_failure
+        self.item_reads = 0
+        self.list_reads = 0
+        self.meta_reads = 0
+        self.item_writes = 0
+        self.list_writes = 0
+        self.meta_writes = 0
+
+    async def get_item(self, _game_id: int) -> CacheLookup[ItemResponse]:
+        self.item_reads += 1
+        self._raise_if_failed()
+        return CacheLookup(value=self.item, generation="100")
+
+    async def set_item(self, item: ItemResponse, _generation: str | None) -> None:
+        self.item_writes += 1
+        self._raise_if_failed(self.write_failure)
+        self.item = item
+
+    async def get_list(self, _params: ItemListParams) -> CacheLookup[ItemListResponse]:
+        self.list_reads += 1
+        self._raise_if_failed()
+        return CacheLookup(value=self.item_list, generation="100")
+
+    async def set_list(
+        self,
+        _params: ItemListParams,
+        item_list: ItemListResponse,
+        _generation: str | None,
+    ) -> None:
+        self.list_writes += 1
+        self._raise_if_failed(self.write_failure)
+        self.item_list = item_list
+
+    async def get_meta(self, _api_version: str) -> CacheLookup[MetaResponse]:
+        self.meta_reads += 1
+        self._raise_if_failed()
+        return CacheLookup(value=self.meta, generation="100")
+
+    async def set_meta(self, meta: MetaResponse, _generation: str | None) -> None:
+        self.meta_writes += 1
+        self._raise_if_failed(self.write_failure)
+        self.meta = meta
+
+    def _raise_if_failed(self, failure: Exception | None = None) -> None:
+        selected_failure = failure if failure is not None else self.failure
+        if selected_failure is not None:
+            raise selected_failure
 
 
 BRIMSTONE = ItemRecord(
@@ -127,17 +209,21 @@ BRIMSTONE_JSON = {
     "introducedInVersion": "rebirth",
 }
 
+BRIMSTONE_RESPONSE = ItemResponse.model_validate(BRIMSTONE_JSON)
+
 
 def build_items_app(
     repository: FakeItemRepository,
     *,
     scopes: frozenset[str] = frozenset({"api:access"}),
+    cache: FakeItemCache | None = None,
 ):
     app = create_app(build_settings())
     app.dependency_overrides[get_api_key_verifier] = lambda: FakeVerifier(
         ApiPrincipal(user_id="user_1", scopes=scopes)
     )
     app.dependency_overrides[get_item_repository] = lambda: repository
+    app.dependency_overrides[get_item_cache] = lambda: cache or FakeItemCache()
     return app
 
 
@@ -419,6 +505,216 @@ async def test_meta_returns_dataset_metadata_after_ingestion() -> None:
         "lastSync": "2026-08-26T10:30:00Z",
         "items": 2,
     }
+
+
+@pytest.mark.asyncio
+async def test_item_cache_hit_skips_postgres_repository() -> None:
+    repository = FakeItemRepository()
+    cache = FakeItemCache(item=BRIMSTONE_RESPONSE)
+    app = build_items_app(repository, cache=cache)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/v1/items/118",
+            headers={"X-API-Key": "ak_valid"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == BRIMSTONE_JSON
+    assert repository.get_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_item_cache_miss_populates_cache_and_next_read_hits() -> None:
+    repository = FakeItemRepository([BRIMSTONE])
+    cache = FakeItemCache()
+    app = build_items_app(repository, cache=cache)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        first = await client.get(
+            "/v1/items/118",
+            headers={"X-API-Key": "ak_valid"},
+        )
+        second = await client.get(
+            "/v1/items/118",
+            headers={"X-API-Key": "ak_valid"},
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json() == BRIMSTONE_JSON
+    assert repository.get_calls == 1
+    assert cache.item_writes == 1
+
+
+@pytest.mark.asyncio
+async def test_list_cache_hit_skips_postgres_repository() -> None:
+    repository = FakeItemRepository()
+    cached = ItemListResponse(
+        items=[BRIMSTONE_RESPONSE],
+        total=1,
+        limit=20,
+        offset=0,
+    )
+    cache = FakeItemCache(item_list=cached)
+    app = build_items_app(repository, cache=cache)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/v1/items",
+            headers={"X-API-Key": "ak_valid"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [BRIMSTONE_JSON],
+        "total": 1,
+        "limit": 20,
+        "offset": 0,
+    }
+    assert repository.list_calls == 0
+    assert repository.count_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_meta_cache_hit_skips_postgres_repository() -> None:
+    cached = MetaResponse(
+        api_version="0.1.0",
+        dataset_version="dataset-1",
+        game_version="repentance",
+        last_sync=datetime(2026, 8, 26, 10, 30, tzinfo=UTC),
+        items=1,
+    )
+    repository = FakeItemRepository()
+    cache = FakeItemCache(meta=cached)
+    app = build_items_app(repository, cache=cache)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/v1/meta",
+            headers={"X-API-Key": "ak_valid"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["datasetVersion"] == "dataset-1"
+    assert repository.meta_calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/v1/items", "/v1/items/118", "/v1/meta"])
+async def test_redis_read_failure_falls_back_to_postgres(path: str) -> None:
+    repository = FakeItemRepository([BRIMSTONE])
+    cache = FakeItemCache(failure=RedisConnectionError("redis-secret"))
+    app = build_items_app(repository, cache=cache)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            path,
+            headers={"X-API-Key": "ak_valid"},
+        )
+
+    assert response.status_code == 200
+    assert "redis-secret" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_redis_write_failure_does_not_change_database_response() -> None:
+    repository = FakeItemRepository([BRIMSTONE])
+    cache = FakeItemCache(write_failure=RedisConnectionError("redis-secret"))
+    app = build_items_app(repository, cache=cache)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/v1/items/118",
+            headers={"X-API-Key": "ak_valid"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == BRIMSTONE_JSON
+    assert cache.item_writes == 1
+
+
+@pytest.mark.asyncio
+async def test_unexpected_cache_failure_is_not_silently_ignored() -> None:
+    repository = FakeItemRepository([BRIMSTONE])
+    cache = FakeItemCache(failure=RuntimeError("programming failure"))
+    app = build_items_app(repository, cache=cache)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/v1/items/118",
+            headers={"X-API-Key": "ak_valid"},
+        )
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "error": {
+            "code": "INTERNAL_ERROR",
+            "message": "An internal error occurred",
+        }
+    }
+    assert repository.get_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_redis_data_error_is_not_treated_as_availability_failure() -> None:
+    repository = FakeItemRepository([BRIMSTONE])
+    cache = FakeItemCache(failure=DataError("invalid cache command"))
+    app = build_items_app(repository, cache=cache)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/v1/items/118",
+            headers={"X-API-Key": "ak_valid"},
+        )
+
+    assert response.status_code == 500
+    assert repository.get_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_random_item_bypasses_cache() -> None:
+    repository = FakeItemRepository([BRIMSTONE])
+    cache = FakeItemCache(item=BRIMSTONE_RESPONSE)
+    app = build_items_app(repository, cache=cache)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/v1/items/random",
+            headers={"X-API-Key": "ak_valid"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == BRIMSTONE_JSON
+    assert repository.random_calls == 1
+    assert cache.item_reads == 0
 
 
 @pytest.mark.asyncio

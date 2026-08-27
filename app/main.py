@@ -12,6 +12,7 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logging import RequestLoggingMiddleware, configure_logging
 from app.core.redis import create_redis
 from app.health.router import router as health_router
+from app.items.cache import RedisCacheClient, RedisItemCache
 from app.items.router import meta_router
 from app.items.router import router as items_router
 
@@ -28,6 +29,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             stack.push_async_callback(database_engine.dispose)
             redis = create_redis(runtime_settings)
             stack.push_async_callback(redis.aclose)
+            item_cache = RedisItemCache(
+                cast(RedisCacheClient, redis),
+                item_ttl_seconds=runtime_settings.cache_item_ttl_seconds,
+                list_ttl_seconds=runtime_settings.cache_list_ttl_seconds,
+                meta_ttl_seconds=runtime_settings.cache_meta_ttl_seconds,
+            )
             secret = (
                 runtime_settings.clerk_secret_key.get_secret_value()
                 if runtime_settings.clerk_secret_key is not None
@@ -38,6 +45,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.database_engine = database_engine
             app.state.session_factory = session_factory
             app.state.redis = redis
+            app.state.item_cache = item_cache
             app.state.api_key_verifier = await bind_api_key_verifier(
                 stack,
                 secret,
