@@ -30,7 +30,8 @@ def test_remote_ingestion_database_uses_verified_tls() -> None:
         {
             "database_url": (
                 "postgresql+asyncpg://user:password@database.example/isaac_api"
-            )
+            ),
+            "redis_url": "redis://localhost:6379/0",
         }
     )
 
@@ -48,7 +49,8 @@ def test_remote_database_tls_disables_key_logging(
         {
             "database_url": (
                 "postgresql+asyncpg://user:password@database.example/isaac_api"
-            )
+            ),
+            "redis_url": "redis://localhost:6379/0",
         }
     )
     monkeypatch.setenv("SSLKEYLOGFILE", "/tmp/postgres-keylog")
@@ -67,7 +69,8 @@ def test_remote_database_tls_does_not_create_keylog_file(
         {
             "database_url": (
                 "postgresql+asyncpg://user:password@database.example/isaac_api"
-            )
+            ),
+            "redis_url": "redis://localhost:6379/0",
         }
     )
     keylog_path = tmp_path / "postgres-keylog"
@@ -83,7 +86,8 @@ def test_database_command_timeout_matches_dependency_timeout() -> None:
         {
             "database_url": (
                 "postgresql+asyncpg://user:password@database.example/isaac_api"
-            )
+            ),
+            "redis_url": "redis://localhost:6379/0",
         }
     )
 
@@ -99,6 +103,7 @@ def test_production_unix_socket_does_not_use_network_tls() -> None:
             "database_url": (
                 "postgresql+asyncpg://user:password@/isaac_api?host=%2Fvar%2Frun%2Fpostgresql"
             ),
+            "redis_url": "redis://localhost:6379/0",
         }
     )
 

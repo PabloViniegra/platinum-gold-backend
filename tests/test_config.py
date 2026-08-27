@@ -101,7 +101,12 @@ def test_ingestion_settings_reject_driver_remote_target_override(
 
     with pytest.raises(ValidationError):
         IngestionSettings.model_validate(
-            {"database_url": ("postgresql+asyncpg://user:password@localhost/isaac_api")}
+            {
+                "database_url": (
+                    "postgresql+asyncpg://user:password@localhost/isaac_api"
+                ),
+                "redis_url": "redis://localhost:6379/0",
+            }
         )
 
 
@@ -130,7 +135,12 @@ def test_ingestion_settings_rejects_unpinned_driver_target_fields(
     monkeypatch.setenv(variable, "5433" if variable == "PGPORT" else "remote")
 
     with pytest.raises(ValidationError):
-        IngestionSettings.model_validate({"database_url": database_url})
+        IngestionSettings.model_validate(
+            {
+                "database_url": database_url,
+                "redis_url": "redis://localhost:6379/0",
+            }
+        )
 
 
 @pytest.mark.parametrize("variable", ["PGPASSWORD", "PGPASSFILE"])
@@ -142,7 +152,10 @@ def test_ingestion_settings_rejects_empty_driver_credentials(
 
     with pytest.raises(ValidationError):
         IngestionSettings.model_validate(
-            {"database_url": "postgresql+asyncpg://user@localhost/isaac_api"}
+            {
+                "database_url": "postgresql+asyncpg://user@localhost/isaac_api",
+                "redis_url": "redis://localhost:6379/0",
+            }
         )
 
 
@@ -158,7 +171,12 @@ def test_ingestion_settings_rejects_ambient_connection_options(
 
     with pytest.raises(ValidationError):
         IngestionSettings.model_validate(
-            {"database_url": ("postgresql+asyncpg://user:password@localhost/isaac_api")}
+            {
+                "database_url": (
+                    "postgresql+asyncpg://user:password@localhost/isaac_api"
+                ),
+                "redis_url": "redis://localhost:6379/0",
+            }
         )
 
 
@@ -169,7 +187,10 @@ def test_ingestion_settings_reject_ssl_keylog_environment(
 
     with pytest.raises(ValidationError):
         IngestionSettings.model_validate(
-            {"database_url": "postgresql+asyncpg://user:password@localhost/isaac_api"}
+            {
+                "database_url": "postgresql+asyncpg://user:password@localhost/isaac_api",
+                "redis_url": "redis://localhost:6379/0",
+            }
         )
 
 
@@ -315,6 +336,7 @@ def test_ingestion_settings_require_explicit_database_target(
             {
                 "environment": environment,
                 "database_url": "postgresql+asyncpg:///isaac_api",
+                "redis_url": "redis://localhost:6379/0",
             }
         )
 
@@ -322,7 +344,10 @@ def test_ingestion_settings_require_explicit_database_target(
 def test_ingestion_settings_reject_unapproved_socket_directory() -> None:
     with pytest.raises(ValidationError):
         IngestionSettings.model_validate(
-            {"database_url": "postgresql+asyncpg:///isaac_api?host=%2Ftmp"}
+            {
+                "database_url": "postgresql+asyncpg:///isaac_api?host=%2Ftmp",
+                "redis_url": "redis://localhost:6379/0",
+            }
         )
 
 

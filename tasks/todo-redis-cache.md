@@ -105,17 +105,17 @@ incrementar la generacion solo tras commit y cerrar todos los recursos.
 
 **Acceptance criteria:**
 
-- [ ] Una ingesta confirmada invalida despues del commit; rollback o
+- [x] Una ingesta confirmada invalida despues del commit; rollback o
   configuracion invalida no cambian la generacion.
-- [ ] Redis se cierra en exito y fallo, igual que el engine PostgreSQL.
-- [ ] Un fallo post-commit termina no cero, explica el estado parcial sin
+- [x] Redis se cierra en exito y fallo, igual que el engine PostgreSQL.
+- [x] Un fallo post-commit termina no cero, explica el estado parcial sin
   secretos y puede recuperarse repitiendo la ingesta.
 
 **Verification:**
 
-- [ ] RED y GREEN: `uv run pytest tests/test_config.py tests/test_ingestion_service.py tests/test_ingest_cli.py`
-- [ ] `uv run ruff check app/core app/ingestion scripts tests/test_ingestion_service.py tests/test_ingest_cli.py`
-- [ ] `uv run pyright app/core app/ingestion scripts tests/test_ingestion_service.py tests/test_ingest_cli.py`
+- [x] RED y GREEN: `uv run pytest tests/test_config.py tests/test_ingestion_service.py tests/test_ingest_cli.py`
+- [x] `uv run ruff check app/core app/ingestion scripts tests/test_ingestion_service.py tests/test_ingest_cli.py`
+- [x] `uv run pyright app/core app/ingestion scripts tests/test_ingestion_service.py tests/test_ingest_cli.py`
 
 **Dependencies:** Tasks 1-2
 

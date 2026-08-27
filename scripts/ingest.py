@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import sys
 from collections.abc import Callable, Sequence
+from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import NoReturn, cast
 
@@ -10,19 +11,26 @@ from asyncpg import (  # type: ignore[reportMissingTypeStubs]
     PostgresError,
 )
 from pydantic import ValidationError
+from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import IngestionSettings
 from app.core.database import create_database
 from app.core.exceptions import AppError
+from app.core.redis import create_redis
 from app.ingestion.loader import SnapshotLoadError, load_snapshot
 from app.ingestion.service import IngestionService
+from app.items.cache import RedisCacheClient, RedisItemCache
 
 MAX_VALIDATION_ERRORS = 20
 MAX_VALIDATION_TEXT = 160
 
 
 class ConfigurationError(Exception):
+    pass
+
+
+class CacheInvalidationError(Exception):
     pass
 
 
@@ -71,10 +79,16 @@ async def run_ingestion(input_path: Path) -> None:
         raise ConfigurationError from exc
     except ValueError as exc:
         raise ConfigurationError from exc
-    try:
+    async with AsyncExitStack() as stack:
+        stack.push_async_callback(engine.dispose)
+        redis = create_redis(settings)
+        stack.push_async_callback(redis.aclose)
+        cache = RedisItemCache(cast(RedisCacheClient, redis))
         await IngestionService(session_factory).ingest(snapshot)
-    finally:
-        await engine.dispose()
+        try:
+            await cache.invalidate()
+        except (OSError, TimeoutError, RedisError, ValueError) as exc:
+            raise CacheInvalidationError from exc
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -93,6 +107,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ConfigurationError:
         print("Ingestion failed: configuration is invalid", file=sys.stderr)
         return 2
+    except CacheInvalidationError:
+        print(
+            "Ingestion failed: data was published but cache invalidation failed; "
+            "repeat ingestion to retry",
+            file=sys.stderr,
+        )
+        return 1
     except (
         AppError,
         InterfaceError,
