@@ -9,6 +9,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DATABASE_QUERY_OPTIONS = frozenset({"prepared_statement_cache_size"})
 MAX_PREPARED_STATEMENT_CACHE_SIZE = 1000
 MAX_REDIS_DATABASE = 15
+DEFAULT_REDIS_MAX_CONNECTIONS = 20
+MAX_REDIS_CONNECTIONS = 100
 DEFAULT_CACHE_ITEM_TTL_SECONDS = 86400
 DEFAULT_CACHE_LIST_TTL_SECONDS = 900
 DEFAULT_CACHE_META_TTL_SECONDS = 86400
@@ -202,6 +204,18 @@ def is_loopback_host(hostname: str | None) -> bool:
         return False
 
 
+def validate_production_redis(environment: str, redis_url: SecretStr) -> None:
+    if environment != "production":
+        return
+
+    redis = urlsplit(redis_url.get_secret_value())
+    if not is_loopback_host(redis.hostname):
+        if redis.scheme != "rediss":
+            raise ValueError("Production REDIS_URL must use rediss")
+        if redis.password is None:
+            raise ValueError("Production remote REDIS_URL must specify a password")
+
+
 class PostgresSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -253,7 +267,11 @@ class Settings(PostgresSettings):
     app_version: str = "0.1.0"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     redis_url: SecretStr
-    redis_max_connections: int = Field(default=20, ge=1, le=100)
+    redis_max_connections: int = Field(
+        default=DEFAULT_REDIS_MAX_CONNECTIONS,
+        ge=1,
+        le=MAX_REDIS_CONNECTIONS,
+    )
     cache_item_ttl_seconds: int = Field(
         default=DEFAULT_CACHE_ITEM_TTL_SECONDS,
         gt=0,
@@ -278,19 +296,28 @@ class Settings(PostgresSettings):
 
     @model_validator(mode="after")
     def require_production_redis_tls(self) -> "Settings":
-        if self.environment != "production":
-            return self
-
-        redis = urlsplit(self.redis_url.get_secret_value())
-        if not is_loopback_host(redis.hostname):
-            if redis.scheme != "rediss":
-                raise ValueError("Production REDIS_URL must use rediss")
-            if redis.password is None:
-                raise ValueError("Production remote REDIS_URL must specify a password")
+        validate_production_redis(self.environment, self.redis_url)
         return self
 
 
 class IngestionSettings(PostgresSettings):
+    redis_url: SecretStr
+    redis_max_connections: int = Field(
+        default=DEFAULT_REDIS_MAX_CONNECTIONS,
+        ge=1,
+        le=MAX_REDIS_CONNECTIONS,
+    )
+
+    @field_validator("redis_url", mode="before")
+    @classmethod
+    def validate_redis_url(cls, value: object) -> object:
+        return validate_redis_url(value)
+
+    @model_validator(mode="after")
+    def require_production_redis_tls(self) -> "IngestionSettings":
+        validate_production_redis(self.environment, self.redis_url)
+        return self
+
     @model_validator(mode="after")
     def require_explicit_database_target(self) -> "IngestionSettings":
         database = urlsplit(self.database_url.get_secret_value())

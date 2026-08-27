@@ -1,12 +1,18 @@
+from typing import Protocol
 from urllib.parse import urlsplit
 
+from pydantic import SecretStr
 from redis.asyncio import Redis
 from redis.asyncio.utils import from_url
 
-from app.core.config import Settings
+
+class RedisSettings(Protocol):
+    redis_url: SecretStr
+    dependency_timeout_seconds: float
+    redis_max_connections: int
 
 
-def create_redis(settings: Settings) -> Redis:
+def create_redis(settings: RedisSettings) -> Redis:
     redis_url = settings.redis_url.get_secret_value()
     options: dict[str, object] = {
         "decode_responses": True,
