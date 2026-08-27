@@ -1,8 +1,9 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
+export SNAPSHOT
 
-.PHONY: help setup dev up down logs migrate migrate-down test integration lint format typecheck check smoke clean
+.PHONY: help setup dev up down logs migrate migrate-down ingest test integration lint format typecheck check smoke clean
 
 help: ## Muestra los comandos disponibles
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -26,6 +27,10 @@ migrate: ## Aplica las migraciones pendientes
 migrate-down: ## Revierte una migración
 	@if [[ ! -f .env ]]; then echo "Crea .env desde .env.example antes de migrar."; exit 1; fi
 	uv run alembic downgrade -1
+
+ingest: ## Publica un snapshot de items
+	@if [[ -z "$${SNAPSHOT:-}" ]]; then echo "Uso: make ingest SNAPSHOT=/path/to/items.json"; exit 1; fi
+	uv run python -m scripts.ingest --input "$${SNAPSHOT}"
 
 dev: up migrate ## Inicia el servidor de desarrollo
 	uv run uvicorn app.main:app --reload
