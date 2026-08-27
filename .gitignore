@@ -26,3 +26,4 @@ opencode.json
 .opencode/*
 .vercel
 .env*.local
+docs/api-frontend-guide.md
