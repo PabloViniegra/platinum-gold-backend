@@ -405,8 +405,91 @@ def test_production_enables_driver_tls_for_remote_database() -> None:
             "database_url": (
                 "postgresql+asyncpg://user:password@database.example/isaac_api"
             ),
-            "redis_url": "rediss://cache.example/0",
+            "redis_url": "rediss://default:token@cache.example/0",
         }
     )
 
     assert settings.database_requires_tls is True
+
+
+@pytest.mark.parametrize(
+    "redis_url",
+    [
+        "redis://localhost:6379/0?socket_timeout=60",
+        "redis://localhost:6379/0#fragment",
+        "redis://localhost:6379/not-a-database",
+        "redis://localhost:6379/16",
+        "redis://localhost:0/0",
+        "redis://host1,host2:6379/0",
+        "redis://host1%2Chost2:6379/0",
+        "redis://host%40other:6379/0",
+        "redis://host%2Fother:6379/0",
+        "redis://host%5Cother:6379/0",
+        "redis://host%3Fother:6379/0",
+        "redis://host%23other:6379/0",
+        "redis://user:@localhost:6379/0",
+        "redis://localhost:6379/0\n",
+    ],
+)
+def test_settings_reject_unsafe_redis_urls(redis_url: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings.model_validate(
+            {
+                "database_url": "postgresql+asyncpg://localhost/isaac_api",
+                "redis_url": redis_url,
+            }
+        )
+
+
+def test_production_remote_redis_requires_password() -> None:
+    with pytest.raises(ValidationError):
+        Settings.model_validate(
+            {
+                "environment": "production",
+                "database_url": (
+                    "postgresql+asyncpg://user:password@database.example/isaac_api"
+                ),
+                "redis_url": "rediss://cache.example:6379/0",
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "redis_url",
+    [
+        "redis://127.0.0.2:6379/0",
+        "redis://[0:0:0:0:0:0:0:1]:6379/0",
+    ],
+)
+def test_production_accepts_unencrypted_loopback_redis(redis_url: str) -> None:
+    settings = Settings.model_validate(
+        {
+            "environment": "production",
+            "database_url": (
+                "postgresql+asyncpg://user:password@database.example/isaac_api"
+            ),
+            "redis_url": redis_url,
+        }
+    )
+
+    assert settings.redis_url.get_secret_value() == redis_url
+
+
+@pytest.mark.parametrize(
+    "redis_url",
+    [
+        "redis://localhost:6379",
+        "redis://localhost:6379/",
+        "redis://localhost:6379/0",
+        "rediss://default:token@cache.example:6379/15",
+    ],
+)
+def test_settings_accept_safe_redis_urls(redis_url: str) -> None:
+    settings = Settings.model_validate(
+        {
+            "database_url": "postgresql+asyncpg://localhost/isaac_api",
+            "redis_url": redis_url,
+        }
+    )
+
+    assert settings.redis_url.get_secret_value() == redis_url

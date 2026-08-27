@@ -14,7 +14,7 @@ def test_remote_production_database_uses_verified_tls() -> None:
             "database_url": (
                 "postgresql+asyncpg://user:password@database.example/isaac_api"
             ),
-            "redis_url": "rediss://cache.example/0",
+            "redis_url": "rediss://default:token@cache.example/0",
         }
     )
 

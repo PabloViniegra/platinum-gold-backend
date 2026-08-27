@@ -11,17 +11,17 @@ ninguna opcion de URL pueda anular TLS, timeouts, decoding o limites del pool.
 
 **Acceptance criteria:**
 
-- [ ] Solo se aceptan URLs `redis`/`rediss` con target, puerto, credenciales y
+- [x] Solo se aceptan URLs `redis`/`rediss` con target, puerto, credenciales y
   base conformes al spec; query parameters y fragments se rechazan.
-- [ ] Produccion remota exige TLS y password sin exponerlos en errores.
-- [ ] El cliente configura TLS/hostname, timeouts, decoding y pool acotado de
+- [x] Produccion remota exige TLS y password sin exponerlos en errores.
+- [x] El cliente configura TLS/hostname, timeouts, decoding y pool acotado de
   forma explicita.
 
 **Verification:**
 
-- [ ] RED y GREEN: `uv run pytest tests/test_config.py tests/test_redis.py`
-- [ ] `uv run ruff check app/core tests/test_config.py tests/test_redis.py`
-- [ ] `uv run pyright app/core tests/test_config.py tests/test_redis.py`
+- [x] RED y GREEN: `uv run pytest tests/test_config.py tests/test_redis.py`
+- [x] `uv run ruff check app/core tests/test_config.py tests/test_redis.py`
+- [x] `uv run pyright app/core tests/test_config.py tests/test_redis.py`
 
 **Dependencies:** None
 

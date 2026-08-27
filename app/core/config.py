@@ -1,4 +1,5 @@
 import os
+from ipaddress import ip_address
 from typing import Literal
 from urllib.parse import parse_qs, unquote, urlsplit
 
@@ -7,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DATABASE_QUERY_OPTIONS = frozenset({"prepared_statement_cache_size"})
 MAX_PREPARED_STATEMENT_CACHE_SIZE = 1000
+MAX_REDIS_DATABASE = 15
 INGESTION_UNIX_SOCKET_PATHS = frozenset({"/run/postgresql", "/var/run/postgresql"})
 DATABASE_ENVIRONMENT_OVERRIDES = frozenset(
     {
@@ -129,6 +131,73 @@ def validate_database_url(value: object) -> object:
     return value
 
 
+def validate_redis_url(value: object) -> object:
+    if not isinstance(value, str):
+        raise ValueError("REDIS_URL must use redis or rediss")
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+        decoded_hostname = unquote(parsed.hostname or "")
+        decoded_parts = (
+            unquote(part)
+            for part in (
+                decoded_hostname,
+                parsed.username or "",
+                parsed.password or "",
+                parsed.path,
+            )
+        )
+        database = parsed.path.removeprefix("/")
+        if (
+            parsed.scheme not in {"redis", "rediss"}
+            or parsed.hostname is None
+            or any(
+                character.isspace() or ord(character) < 32 or ord(character) == 127
+                for character in value
+            )
+            or any(
+                character.isspace() or ord(character) < 32 or ord(character) == 127
+                for part in decoded_parts
+                for character in part
+            )
+            or "?" in value
+            or "#" in value
+            or parsed.query
+            or parsed.fragment
+            or parsed.username == ""
+            or parsed.password == ""
+            or parsed.netloc.count("@") > 1
+            or "," in parsed.netloc
+            or any(
+                character in {",", "@", "/", "\\", "?", "#", "[", "]"}
+                for character in decoded_hostname
+            )
+            or parsed.netloc.endswith(":")
+            or (port is not None and not 1 <= port <= 65535)
+            or (
+                parsed.path not in {"", "/"}
+                and (
+                    not database.isascii()
+                    or not database.isdigit()
+                    or int(database) > MAX_REDIS_DATABASE
+                )
+            )
+        ):
+            raise ValueError
+    except ValueError as exc:
+        raise ValueError("REDIS_URL must use redis or rediss") from exc
+    return value
+
+
+def is_loopback_host(hostname: str | None) -> bool:
+    if hostname == "localhost":
+        return True
+    try:
+        return hostname is not None and ip_address(hostname).is_loopback
+    except ValueError:
+        return False
+
+
 class PostgresSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -180,17 +249,13 @@ class Settings(PostgresSettings):
     app_version: str = "0.1.0"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     redis_url: SecretStr
+    redis_max_connections: int = Field(default=20, ge=1, le=100)
     clerk_secret_key: SecretStr | None = None
 
     @field_validator("redis_url", mode="before")
     @classmethod
     def validate_redis_url(cls, value: object) -> object:
-        if not isinstance(value, str) or urlsplit(value).scheme not in {
-            "redis",
-            "rediss",
-        }:
-            raise ValueError("REDIS_URL must use redis or rediss")
-        return value
+        return validate_redis_url(value)
 
     @model_validator(mode="after")
     def require_production_redis_tls(self) -> "Settings":
@@ -198,10 +263,11 @@ class Settings(PostgresSettings):
             return self
 
         redis = urlsplit(self.redis_url.get_secret_value())
-        if redis.hostname not in {"localhost", "127.0.0.1", "::1"} and (
-            redis.scheme != "rediss"
-        ):
-            raise ValueError("Production REDIS_URL must use rediss")
+        if not is_loopback_host(redis.hostname):
+            if redis.scheme != "rediss":
+                raise ValueError("Production REDIS_URL must use rediss")
+            if redis.password is None:
+                raise ValueError("Production remote REDIS_URL must specify a password")
         return self
 
 
