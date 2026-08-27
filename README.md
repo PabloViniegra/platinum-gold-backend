@@ -4,7 +4,7 @@
 
 <br />
 
-<img src="https://upload.wikimedia.org/wikipedia/en/thumb/a/a2/The_Binding_of_Isaac-_Rebirth.jpg/640px-The_Binding_of_Isaac-_Rebirth.jpg" alt="The Binding of Isaac cover art" width="640" />
+<img src="https://upload.wikimedia.org/wikipedia/en/thumb/e/e1/The_Binding_of_Issac_Rebirth_cover.jpg/250px-The_Binding_of_Issac_Rebirth_cover.jpg" alt="The Binding of Isaac cover art" width="250" />
 
 <br />
 
