@@ -9,6 +9,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DATABASE_QUERY_OPTIONS = frozenset({"prepared_statement_cache_size"})
 MAX_PREPARED_STATEMENT_CACHE_SIZE = 1000
 MAX_REDIS_DATABASE = 15
+DEFAULT_CACHE_ITEM_TTL_SECONDS = 86400
+DEFAULT_CACHE_LIST_TTL_SECONDS = 900
+DEFAULT_CACHE_META_TTL_SECONDS = 86400
+MAX_CACHE_TTL_SECONDS = 604800
 INGESTION_UNIX_SOCKET_PATHS = frozenset({"/run/postgresql", "/var/run/postgresql"})
 DATABASE_ENVIRONMENT_OVERRIDES = frozenset(
     {
@@ -250,6 +254,21 @@ class Settings(PostgresSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     redis_url: SecretStr
     redis_max_connections: int = Field(default=20, ge=1, le=100)
+    cache_item_ttl_seconds: int = Field(
+        default=DEFAULT_CACHE_ITEM_TTL_SECONDS,
+        gt=0,
+        le=MAX_CACHE_TTL_SECONDS,
+    )
+    cache_list_ttl_seconds: int = Field(
+        default=DEFAULT_CACHE_LIST_TTL_SECONDS,
+        gt=0,
+        le=MAX_CACHE_TTL_SECONDS,
+    )
+    cache_meta_ttl_seconds: int = Field(
+        default=DEFAULT_CACHE_META_TTL_SECONDS,
+        gt=0,
+        le=MAX_CACHE_TTL_SECONDS,
+    )
     clerk_secret_key: SecretStr | None = None
 
     @field_validator("redis_url", mode="before")

@@ -61,13 +61,18 @@ cache:v1:{generation}:list:{sha256_of_canonical_params}
 cache:v1:{generation}:meta:{api_version}
 ```
 
-- La generacion ausente equivale a `0`.
+- La generacion ausente se inicializa atomica y aleatoriamente con un entero
+  positivo. Esto evita resucitar claves de una generacion anterior si Redis
+  pierde solo el puntero de generacion.
 - Los parametros de listado se serializan con nombres y valores normalizados,
   orden estable y sin incluir API keys. El hash evita almacenar busquedas del
   usuario en el nombre de la clave.
-- Los payloads se serializan como el JSON camelCase del schema publico y se
-  validan de nuevo al leerlos. Un payload ausente, invalido o incompatible se
-  trata como miss; nunca se devuelve sin validacion.
+- Los payloads se serializan como JSON camelCase del schema publico y se
+  validan de nuevo al leerlos. Los listados se guardan dentro de un envelope
+  interno con la huella canonica de sus parametros para impedir que una
+  respuesta de otro filtro se acepte bajo la misma clave. Un payload ausente,
+  invalido o incompatible se trata como miss; nunca se devuelve sin
+  validacion.
 - TTL inicial: item individual y metadata, `86400` segundos; listados,
   `900` segundos. Son configuracion tipada con limites positivos, no query
   parameters de `REDIS_URL`.

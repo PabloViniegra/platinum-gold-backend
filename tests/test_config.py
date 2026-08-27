@@ -493,3 +493,22 @@ def test_settings_accept_safe_redis_urls(redis_url: str) -> None:
     )
 
     assert settings.redis_url.get_secret_value() == redis_url
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "cache_item_ttl_seconds",
+        "cache_list_ttl_seconds",
+        "cache_meta_ttl_seconds",
+    ],
+)
+def test_settings_require_positive_cache_ttls(field: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings.model_validate(
+            {
+                "database_url": "postgresql+asyncpg://localhost/isaac_api",
+                "redis_url": "redis://localhost:6379/0",
+                field: 0,
+            }
+        )

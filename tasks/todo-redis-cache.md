@@ -41,16 +41,16 @@ claves deterministas, TTL y validacion de payloads, sin integrar aun FastAPI.
 
 **Acceptance criteria:**
 
-- [ ] Item, listado y metadata producen claves versionadas; filtros equivalentes
+- [x] Item, listado y metadata producen claves versionadas; filtros equivalentes
   producen el mismo hash sin texto en claro.
-- [ ] Los payloads validos hacen round-trip y los ausentes/corruptos son miss.
-- [ ] Toda escritura tiene TTL y `invalidate()` incrementa la generacion.
+- [x] Los payloads validos hacen round-trip y los ausentes/corruptos son miss.
+- [x] Toda escritura tiene TTL y `invalidate()` incrementa la generacion.
 
 **Verification:**
 
-- [ ] RED y GREEN: `uv run pytest tests/test_cache.py`
-- [ ] `uv run ruff check app/items/cache.py tests/test_cache.py`
-- [ ] `uv run pyright app/items/cache.py tests/test_cache.py`
+- [x] RED y GREEN: `uv run pytest tests/test_cache.py`
+- [x] `uv run ruff check app/items/cache.py tests/test_cache.py`
+- [x] `uv run pyright app/items/cache.py tests/test_cache.py`
 
 **Dependencies:** Task 1
 
