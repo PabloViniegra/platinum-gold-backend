@@ -1,8 +1,8 @@
 # Tasks: Hardening Redis y cache-aside de items
 
-El spec aprobado es `tasks/spec-redis-cache.md` y el plan pendiente de
-aprobacion es `tasks/plan-redis-cache.md`. Cada tarea sigue RED, GREEN, REFACTOR
-y deja el repositorio verificable.
+El spec aprobado es `tasks/spec-redis-cache.md` y el plan de implementación es
+`tasks/plan-redis-cache.md`. Cada tarea sigue RED, GREEN, REFACTOR y deja el
+repositorio verificable.
 
 ## Task 1: Cerrar el boundary de conexion Redis
 
@@ -136,19 +136,19 @@ gates y resolver solo findings introducidas por este trabajo.
 
 **Acceptance criteria:**
 
-- [ ] README documenta el contrato Redis, TTLs, fail-open e invalidacion.
-- [ ] Spec, plan, tareas y codigo no se contradicen.
-- [ ] Reviews de calidad, Python y seguridad no dejan findings introducidas sin
+- [x] README documenta el contrato Redis, TTLs, fail-open e invalidacion.
+- [x] Spec, plan, tareas y codigo no se contradicen.
+- [x] Reviews de calidad, Python y seguridad no dejan findings introducidas sin
   resolver.
 
 **Verification:**
 
-- [ ] `uv run pytest`
-- [ ] `uv run ruff check .`
-- [ ] `uv run ruff format --check .`
-- [ ] `uv run pyright`
-- [ ] `git diff --check`
-- [ ] Review con `code-reviewer`, `python-reviewer` y `security-reviewer`
+- [x] `uv run pytest`
+- [x] `uv run ruff check .`
+- [x] `uv run ruff format --check .`
+- [x] `uv run pyright`
+- [x] `git diff --check`
+- [x] Review con `code-reviewer`, `python-reviewer` y `security-reviewer`
 
 **Dependencies:** Tasks 3-4
 
@@ -163,6 +163,6 @@ gates y resolver solo findings introducidas por este trabajo.
 
 ## Checkpoint: Complete
 
-- [ ] Todos los criterios de `tasks/spec-redis-cache.md` estan cubiertos.
-- [ ] Todos los gates estan verdes.
-- [ ] El diff esta listo para el workflow de shipping, sin desplegarlo.
+- [x] Todos los criterios de `tasks/spec-redis-cache.md` estan cubiertos.
+- [x] Todos los gates estan verdes.
+- [x] El diff esta listo para el workflow de shipping, sin desplegarlo.

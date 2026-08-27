@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 import pytest
 from httpx import ASGITransport, AsyncClient
 from redis.exceptions import ConnectionError as RedisConnectionError
-from redis.exceptions import DataError
+from redis.exceptions import DataError, ResponseError
 
 from app.auth.dependencies import get_api_key_verifier
 from app.auth.principal import ApiPrincipal
@@ -629,6 +629,27 @@ async def test_redis_read_failure_falls_back_to_postgres(path: str) -> None:
         )
 
     assert response.status_code == 200
+    assert "redis-secret" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_redis_command_failure_falls_back_to_postgres() -> None:
+    repository = FakeItemRepository([BRIMSTONE])
+    cache = FakeItemCache(failure=ResponseError("redis-secret"))
+    app = build_items_app(repository, cache=cache)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/v1/items/118",
+            headers={"X-API-Key": "ak_valid"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == BRIMSTONE_JSON
+    assert repository.get_calls == 1
     assert "redis-secret" not in response.text
 
 

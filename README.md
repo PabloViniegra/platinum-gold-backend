@@ -5,9 +5,9 @@ the source of truth and Redis provides disposable runtime infrastructure.
 
 This repository currently contains the executable foundation described in
 `tasks/spec.md`, Clerk API-key authentication described in `tasks/spec-auth.md`,
-the authenticated read API for items, and the offline ingestion flow described
-in `tasks/spec-initial-ingestion.md`. Caching and rate limiting are not
-implemented yet.
+the authenticated read API for items, the generational Redis cache, and the
+offline ingestion flow described in `tasks/spec-initial-ingestion.md`. Rate
+limiting is not implemented yet.
 
 ## Requirements
 
@@ -33,7 +33,8 @@ Platinum God is the upstream source. Ingestion runs offline from an explicit,
 versioned JSON snapshot and never scrapes or contacts the upstream source from
 the API runtime.
 
-After configuring `DATABASE_URL` in `.env`, publish the example snapshot with:
+After configuring `DATABASE_URL` and `REDIS_URL` in `.env`, publish the example
+snapshot with:
 
 ```bash
 uv run python -m scripts.ingest --input data/items.example.json
@@ -41,11 +42,15 @@ uv run python -m scripts.ingest --input data/items.example.json
 
 The command validates the complete snapshot before opening a transaction,
 upserts items by `gameId`, preserves records absent from the snapshot, and
-updates dataset metadata only after the full transaction succeeds. A run that
-is not newer than the recorded synchronization is a successful no-op, so an
-older run cannot replace committed data. The command does not infer ordering
-from the opaque `datasetVersion` label. Invalid input or a database failure
-exits non-zero without publishing partial data.
+updates dataset metadata only after the full transaction succeeds. After the
+PostgreSQL transaction commits, the command increments the shared Redis cache
+generation so old entries become unreachable. A run that is not newer than the
+recorded synchronization is a successful no-op, so an older run cannot replace
+committed data. The command does not infer ordering from the opaque
+`datasetVersion` label. Invalid input or a database failure exits non-zero
+without publishing partial data. If PostgreSQL commits but Redis invalidation
+fails, the command exits non-zero with a sanitized partial-state message; repeat
+the ingestion to retry invalidation.
 The snapshot contract and update policy are documented in
 `tasks/spec-initial-ingestion.md`.
 
@@ -60,6 +65,20 @@ The snapshot contract and update policy are documented in
 `GET /health/ready` checks PostgreSQL and Redis. It returns `200` when both are
 available and `503` with a generic error plus sanitized dependency states when
 either dependency is unavailable.
+
+## Redis Cache
+
+`GET /v1/items`, `GET /v1/items/{item_id}`, and `GET /v1/meta` use cache-aside
+lookups backed by PostgreSQL. A valid cache hit avoids the corresponding
+PostgreSQL query. Redis is disposable: connection, timeout, pool, and command
+failures fall back to PostgreSQL and emit a structured warning without URLs,
+credentials, filters, or payloads. Corrupt or invalidated payloads are treated
+as misses. Programming errors and cancellation are not hidden.
+
+Item and metadata entries expire after `86400` seconds by default; list entries
+expire after `900` seconds. These TTLs are bounded configuration values, not
+Redis URL query parameters. `/v1/items/random`, errors, and `404` results are
+never cached.
 
 Every response includes `X-Request-ID`. A valid client-provided request ID is
 preserved; otherwise the API generates a UUID.
@@ -103,6 +122,11 @@ tables automatically at startup.
 |---|---:|---|
 | `DATABASE_URL` | Yes | Async SQLAlchemy URL using `postgresql+asyncpg` |
 | `REDIS_URL` | Yes | Redis URL using `redis` or `rediss` |
+| `REDIS_MAX_CONNECTIONS` | No | Maximum Redis pool size, defaults to `20` |
+| `DEPENDENCY_TIMEOUT_SECONDS` | No | PostgreSQL/Redis timeout, defaults to `2` |
+| `CACHE_ITEM_TTL_SECONDS` | No | Item cache TTL, defaults to `86400` |
+| `CACHE_LIST_TTL_SECONDS` | No | List cache TTL, defaults to `900` |
+| `CACHE_META_TTL_SECONDS` | No | Metadata cache TTL, defaults to `86400` |
 | `CLERK_SECRET_KEY` | No | Clerk Backend secret for protected routes. Missing values fail closed. |
 | `ENVIRONMENT` | No | `development`, `test`, or `production` |
 | `LOG_LEVEL` | No | Python log level, defaults to `INFO` |
@@ -110,6 +134,12 @@ tables automatically at startup.
 Non-loopback PostgreSQL connections use verified TLS in every environment.
 Remote production Redis must use `rediss://`. Local loopback and Unix-socket
 connections may remain unencrypted for development.
+
+`REDIS_URL` accepts only a hostname, an optional numeric database path from `0`
+through `15`, and no query parameters or fragments. Remote production Redis
+also requires a password and certificate/hostname verification. The ingestion
+command uses the same Redis URL validation and requires `REDIS_URL` before it
+opens PostgreSQL.
 
 The ingestion command requires an explicit database hostname or the approved
 local socket directories (`/run/postgresql` or `/var/run/postgresql`), plus the

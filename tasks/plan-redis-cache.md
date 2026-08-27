@@ -62,7 +62,7 @@ Deterministic API cache-aside   Post-commit ingestion invalidation
 
 ### Phase 3: Read path
 
-1. Inyectar el adaptador desde `app.state.redis` conservando overrides de tests.
+1. Inyectar el adaptador desde `app.state.item_cache` conservando overrides de tests.
 2. Añadir cache-aside a item, listado y metadata; excluir `/random`.
 3. Verificar hits sin repository, misses con repoblado, contrato HTTP intacto y
    warnings sanitizados en fallos operativos.

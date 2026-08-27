@@ -4,6 +4,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import ResponseError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from app.core.exceptions import AppError
@@ -18,7 +19,13 @@ from app.items.schemas import (
 )
 
 CacheValue = TypeVar("CacheValue", bound=BaseModel)
-CACHE_FAILURES = (OSError, TimeoutError, RedisConnectionError, RedisTimeoutError)
+CACHE_FAILURES = (
+    OSError,
+    TimeoutError,
+    RedisConnectionError,
+    RedisTimeoutError,
+    ResponseError,
+)
 cache_logger = logging.getLogger("app.cache")
 
 
