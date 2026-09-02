@@ -106,6 +106,11 @@ class ItemImport(BaseModel):
     def validate_known_fields(cls, value: object) -> object:
         return reject_unknown_fields(value, ITEM_IMPORT_FIELDS, cls.__name__)
 
+    @field_validator("item_type")
+    @classmethod
+    def normalize_item_type(cls, value: str) -> str:
+        return value.lower()
+
     @field_validator("image_url")
     @classmethod
     def validate_image_url(cls, value: str) -> str:

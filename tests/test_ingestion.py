@@ -51,6 +51,26 @@ def test_load_snapshot_accepts_camel_case_and_strips_strings(tmp_path: Path) -> 
 
 
 @pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Passive", "passive"),
+        ("ACTIVE", "active"),
+        (" Familiar ", "familiar"),
+    ],
+)
+def test_snapshot_normalizes_item_type_to_lowercase(raw: str, expected: str) -> None:
+    payload = valid_payload()
+    items = payload["items"]
+    assert isinstance(items, list)
+    assert isinstance(items[0], dict)
+    items[0]["type"] = raw
+
+    snapshot = ItemSnapshot.model_validate(payload)
+
+    assert snapshot.items[0].item_type == expected
+
+
+@pytest.mark.parametrize(
     ("field", "value"),
     [
         ("gameId", "118"),
